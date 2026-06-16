@@ -1,8 +1,5 @@
-// FROZEN AI v1 — DO NOT EDIT.
-// Immutable snapshot of the live BotController (dypm-style single-scoring loop) at the v1 milestone.
-// Used only as a versioned benchmark opponent. Never import the live BotController/Strategies here.
 /**
- * V1BotController — a deterministic AI "brain" that turns the SimState it observes
+ * BotController — a deterministic AI "brain" that turns the SimState it observes
  * into one InputFrame per tick (move direction + bomb action).
  *
  * ARCHITECTURE (single weighted scoring loop):
@@ -39,11 +36,11 @@
  * The cheap "earliest-fire" grid.predictDanger is reused for the escape-commit
  * path (already validated against self-trap).
  */
-import type { SimState } from '../../../../client/src/sim/Sim';
-import { type InputFrame, DIRECTION_ORDER, NO_INPUT } from '../../../../client/src/sim/InputBuffer';
-import { idx, inBounds } from '../../../../client/src/sim/Map';
-import { dirDX, dirDY, playerSpeedMtPerTick, tileOf } from '../../../../client/src/sim/Player';
-import { bombAt } from '../../../../client/src/sim/Bomb';
+import type { SimState } from '../../sim/Sim';
+import { type InputFrame, DIRECTION_ORDER, NO_INPUT } from '../../sim/InputBuffer';
+import { idx, inBounds } from '../../sim/Map';
+import { dirDX, dirDY, playerSpeedMtPerTick, tileOf } from '../../sim/Player';
+import { bombAt } from '../../sim/Bomb';
 import {
   FUSE_TICKS,
   MAP_COLS,
@@ -52,8 +49,8 @@ import {
   SPARK_TICKS,
 } from '../../../../shared/constants';
 import { ActionFlags, Direction, ItemKind, TileKind } from '../../../../shared/types';
-import type { BotTuning } from '../../../../client/src/ai/BotConfig';
-import { botRandFloat, botRandInt } from '../../../../client/src/ai/BotConfig';
+import type { BotTuning } from './BotConfig';
+import { botRandFloat, botRandInt } from './BotConfig';
 import {
   type DangerMap,
   type Passable,
@@ -65,8 +62,11 @@ import {
   openPassable,
   predictDanger,
   tileDangerTicks,
-} from './v1Grid';
-import { type IntervalDanger, buildDangerMap } from './v1DangerMap';
+} from '../common/grid';
+import { type IntervalDanger, buildDangerMap } from '../common/dangerMap';
+
+// Live bot = current AI_VERSION (see version.ts)
+export { AI_VERSION } from './version';
 
 // ---------------------------------------------------------------------------
 // Timing / horizon constants
@@ -156,7 +156,7 @@ interface Candidate {
   refugeY: number;
 }
 
-export class V1BotController {
+export class BotController {
   /** Threaded bot-private uint32 RNG state (never SimState.prng). */
   private rng: number;
   private readonly tuning: BotTuning;

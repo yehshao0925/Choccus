@@ -32,9 +32,9 @@ import { type InputFrame } from '../../../client/src/sim/InputBuffer';
 import { idx, inBounds } from '../../../client/src/sim/Map';
 import { tileOf } from '../../../client/src/sim/Player';
 import { createInitialState, tick, type SimState } from '../../../client/src/sim/Sim';
-import { BotController } from '../../../client/src/ai/BotController';
-import { botSeed } from '../../../client/src/ai/BotConfig';
-import { STRATEGIES } from '../../../client/src/ai/Strategies';
+import { BotController } from '../../../client/src/ai/v2/BotController';
+import { botSeed } from '../../../client/src/ai/v2/BotConfig';
+import { STRATEGIES } from '../../../client/src/ai/v2/Strategies';
 
 const CHAOSV = STRATEGIES.find((s) => s.key === 'chaosv')!;
 

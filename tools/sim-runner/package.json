@@ -9,7 +9,8 @@
     "tournament": "tsx src/tournament.ts",
     "gen-fixtures": "tsx src/gen-fixtures.ts",
     "update-golden": "tsx src/update-golden.ts",
-    "version-bench": "tsx src/version-bench.ts"
+    "version-bench": "tsx src/version-bench.ts",
+    "duel-bench": "tsx src/duel-bench.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

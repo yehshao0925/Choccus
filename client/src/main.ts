@@ -22,9 +22,13 @@
  */
 import { TICK_MS } from '../../shared/constants';
 import { GamePhase } from '../../shared/types';
-import { BotController } from './ai/BotController';
-import { type BotTuning, botSeed, parseDifficulty, tuningFor } from './ai/BotConfig';
-import { resolveStrategy, strategyForSlot } from './ai/Strategies';
+import {
+  AI_VERSIONS,
+  type BotSpec,
+  type IBotController,
+  LATEST_AI_VERSION,
+  parseDifficulty,
+} from './ai';
 import { matchSound } from './audio/MatchSound';
 import { sfx } from './audio/Sfx';
 import { type FeelParams, makeFeelParams } from './config/FeelParams';
@@ -60,44 +64,100 @@ async function bootstrapSolo(params: URLSearchParams): Promise<void> {
       : Math.max(0, Math.min(3, Math.trunc(botsRaw)));
   const difficulty = parseDifficulty(params.get('difficulty'));
 
+  // Team format: 'ffa' (default) = everyone on their own team, bot-count picker
+  // active. '2v2' = fixed 4 players, diagonal teams [0,1,1,0] (human slot0 +
+  // slot3 vs slots1,2), bot count forced to 3. ?format=ffa|2v2 (case-insensitive,
+  // else → ffa) sets the initial value.
+  type TeamFormat = 'ffa' | '2v2';
+  const parseFormat = (raw: string | null): TeamFormat =>
+    raw?.toLowerCase() === '2v2' ? '2v2' : 'ffa';
+  let format: TeamFormat = parseFormat(params.get('format'));
+
+  // Diagonal teams for 2v2: human slot0 + slot3 vs slots1,2.
+  const TEAMS_2V2: readonly number[] = [0, 1, 1, 0];
+
+  // Effective bot count for the current format: forced to 3 in 2v2 (4 players
+  // total), otherwise the picker value. Used at every count consumption site
+  // (numPlayers, buildBots loop, per-tick bot sampling) WITHOUT mutating `bots`,
+  // so switching back to FFA restores the picker selection.
+  const effectiveBots = (): number => (format === '2v2' ? 3 : bots);
+
+  // Team array passed to createInitialState: the fixed 2v2 diagonal, or
+  // undefined in FFA (keeps the FFA path byte-for-byte equivalent to before).
+  const teamsForFormat = (): readonly number[] | undefined =>
+    format === '2v2' ? TEAMS_2V2 : undefined;
+
   // Named-strategy mode (?strategy=). Independent of difficulty: when a strategy
   // is given, every bot uses the strategy tuning and difficulty is ignored;
-  // when absent, bots fall back to the difficulty tuning. All assignment is
-  // fully deterministic (no Math.random) — safe for lockstep.
+  // when absent, bots fall back to the difficulty tuning. Strategy/tuning/name
+  // resolution lives in each AI version's module (see ai/index.ts); we just pass
+  // the raw spec through. All assignment is fully deterministic (no Math.random)
+  // — safe for lockstep.
   //   ?strategy=aggressor|turtle|gambler|chaosv → all bots use that archetype.
   //   ?strategy=mix (or random)                 → each bot cycles a distinct
   //                                               archetype by its bot index.
+  //
+  // Per-slot AI version (?botVersions=). Comma list, index = slot-1 (slot 1 is
+  // the first bot), e.g. ?botVersions=2,1,2. Missing/short/empty entries → the
+  // latest version; unknown numbers are clamped to the latest. Default (param
+  // absent) → every bot runs the latest version. Version choice is a render/
+  // factory concern only; it NEVER enters SimState/stateHash.
   const strategyRaw = (params.get('strategy') ?? '').toLowerCase().trim();
-  const named = strategyRaw === '' ? undefined : resolveStrategy(strategyRaw);
-  const isMix = strategyRaw === 'mix' || strategyRaw === 'random';
+  // Version-agnostic spec handed to the chosen AI version module per slot.
+  const botSpec: BotSpec = { difficulty, strategyRaw };
 
-  // Resolve the bot brain tuning for an AI slot (1..bots). bot index = slot - 1.
-  const tuningForSlot = (slot: number): BotTuning => {
-    if (isMix) return strategyForSlot(slot - 1).tuning;
-    if (named !== undefined) return named.tuning;
-    return tuningFor(difficulty);
+  // Parse ?botVersions= into a per-bot-index list of AI version numbers.
+  const versionList: number[] = (params.get('botVersions') ?? '')
+    .split(',')
+    .map((s) => Number.parseInt(s.trim(), 10));
+  // AI version for an AI slot (1..bots). bot index = slot - 1. Unknown/missing
+  // entries fall back to the latest registered version.
+  const versionForSlot = (slot: number): number => {
+    const v = versionList[slot - 1];
+    return v !== undefined && Number.isFinite(v) && AI_VERSIONS[v] !== undefined
+      ? v
+      : LATEST_AI_VERSION;
   };
+  // The AI version module driving a given AI slot.
+  const moduleForSlot = (slot: number): (typeof AI_VERSIONS)[number] =>
+    AI_VERSIONS[versionForSlot(slot)]!;
 
   // Render-layer-only slot→label table (index = player slot). slot 0 = human.
   // NEVER goes into SimState/stateHash; consumed solely by the HUD. Rebuilt on
   // every reset() so HUD labels track the current bot count.
-  const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+  // Bot brain display name for an AI slot (1..N): the chosen version module's
+  // name, suffixed with ` vN` when the slot is not on the latest version so a
+  // mixed-version match is legible in the HUD (render-only).
+  const botName = (slot: number): string => {
+    const version = versionForSlot(slot);
+    const base = AI_VERSIONS[version]!.botNameFor(slot, botSpec);
+    return version === LATEST_AI_VERSION ? base : `${base} v${version}`;
+  };
   const buildSlotLabels = (): (string | undefined)[] => {
-    const labels: (string | undefined)[] = ['YOU'];
-    for (let slot = 1; slot <= bots; slot++) {
-      if (isMix) labels.push(strategyForSlot(slot - 1).name);
-      else if (named !== undefined) labels.push(named.name);
-      else labels.push(cap(difficulty));
+    if (format === '2v2') {
+      // Diagonal teams [0,1,1,0]: slot0 = you, slot3 = ally, slots1,2 = enemies.
+      return [
+        'YOU',
+        botName(1),
+        botName(2),
+        `ALLY (${botName(3)})`,
+      ];
     }
+    const labels: (string | undefined)[] = ['YOU'];
+    for (let slot = 1; slot <= bots; slot++) labels.push(botName(slot));
     return labels;
   };
 
   // Render-layer-only HUD hint text. Rebuilt on every reset() so the bot count
   // shown tracks the current picker selection.
-  const buildHint = (): string =>
-    bots > 0
+  const buildHint = (): string => {
+    if (format === '2v2') {
+      return `2v2 Team (${difficulty}) — Arrows move · Space drops chocolate`;
+    }
+    return bots > 0
       ? `Solo +${bots} AI (${difficulty}) — Arrows move · Space drops chocolate`
       : 'Solo — Arrows move · Space drops chocolate';
+  };
 
   // Map kind: ?map=classic|pirate (case-insensitive); anything else → classic.
   const parseMapKind = (raw: string | null): MapKind => {
@@ -115,20 +175,22 @@ async function bootstrapSolo(params: URLSearchParams): Promise<void> {
   // differently (item drops + bot play). buildBots / createInitialState below
   // read this current value.
   let seed = randomSeed();
-  // team = slot (default): the human is team 0 vs each bot on its own team;
-  // last survivor wins.
-  let cur: SimState = createInitialState(seed, feel, 1 + bots, {
+  // FFA: team = slot (human team 0 vs each bot on its own team). 2v2: diagonal
+  // teams [0,1,1,0]. last team standing wins.
+  let cur: SimState = createInitialState(seed, feel, 1 + effectiveBots(), {
     pvp: true,
     map: mapKind,
+    teams: teamsForFormat(),
   });
   let prev: SimState = cur;
 
-  // Deterministic bot brains, one per AI slot (1..bots). Reads the current
-  // match seed at call time → bots re-derive from the new seed each match.
-  const buildBots = (): BotController[] => {
-    const arr: BotController[] = [];
-    for (let slot = 1; slot <= bots; slot++) {
-      arr.push(new BotController(botSeed(seed, slot), tuningForSlot(slot), slot));
+  // Deterministic bot brains, one per AI slot (1..effectiveBots). Reads the
+  // current match seed at call time → bots re-derive from the new seed each
+  // match. Each slot's brain comes from its chosen AI version module.
+  const buildBots = (): IBotController[] => {
+    const arr: IBotController[] = [];
+    for (let slot = 1; slot <= effectiveBots(); slot++) {
+      arr.push(moduleForSlot(slot).createBot(seed, slot, botSpec));
     }
     return arr;
   };
@@ -170,10 +232,11 @@ async function bootstrapSolo(params: URLSearchParams): Promise<void> {
     // Re-roll first so buildBots() and createInitialState() see the new seed.
     seed = randomSeed();
     botControllers = buildBots();
-    // team = slot (default): human team 0 vs each bot on its own team.
-    cur = createInitialState(seed, feel, 1 + bots, {
+    // FFA: team = slot. 2v2: diagonal teams [0,1,1,0].
+    cur = createInitialState(seed, feel, 1 + effectiveBots(), {
       pvp: true,
       map: mapKind,
+      teams: teamsForFormat(),
     });
     prev = cur;
     // Render-layer only: refresh HUD labels/hint so a changed bot count shows.
@@ -257,6 +320,39 @@ async function bootstrapSolo(params: URLSearchParams): Promise<void> {
   });
   document.body.appendChild(botPicker);
 
+  // Solo team-format picker (third row, below the bot-count picker). 2v2 forces
+  // a fixed 4-player diagonal-team match and disables the bot-count picker.
+  const formatPicker = document.createElement('select');
+  formatPicker.style.cssText =
+    'position:fixed;top:80px;left:8px;z-index:900;padding:6px 12px;' +
+    'background:rgba(61,28,2,0.85);color:#f5e6d3;border:none;border-radius:8px;' +
+    'font:13px system-ui,sans-serif;cursor:pointer;';
+  const formatOptions: ReadonlyArray<readonly [TeamFormat, string]> = [
+    ['ffa', 'Free For All'],
+    ['2v2', '2v2 Team'],
+  ];
+  for (const [value, label] of formatOptions) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    if (value === format) opt.selected = true;
+    formatPicker.appendChild(opt);
+  }
+  // Reflect format → bot-picker enabled state (greyed + disabled in 2v2 since
+  // the count is forced to 3). Applied at init and on every format change.
+  const syncBotPicker = (): void => {
+    const disabled = format === '2v2';
+    botPicker.disabled = disabled;
+    botPicker.style.opacity = disabled ? '0.4' : '1';
+  };
+  formatPicker.addEventListener('change', () => {
+    format = parseFormat(formatPicker.value);
+    syncBotPicker();
+    reset();
+  });
+  document.body.appendChild(formatPicker);
+  syncBotPicker();
+
   // "Click anywhere to enable sound" hint.
   const soundHint = document.createElement('div');
   soundHint.style.cssText =
@@ -281,7 +377,7 @@ async function bootstrapSolo(params: URLSearchParams): Promise<void> {
 
     while (acc >= TICK_MS) {
       const inputs: InputFrame[] = [sampleLocalInput(keyboard)];
-      for (let slot = 1; slot <= bots; slot++) {
+      for (let slot = 1; slot <= effectiveBots(); slot++) {
         const c = botControllers[slot - 1];
         inputs.push(c ? c.sample(cur, slot) : NO_INPUT);
       }

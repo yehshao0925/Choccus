@@ -12,8 +12,8 @@ import { TileKind } from '../../../shared/types';
 import { makeFeelParams } from '../../../client/src/config/FeelParams';
 import { NO_INPUT, type InputFrame } from '../../../client/src/sim/InputBuffer';
 import { createInitialState, tick, type SimState } from '../../../client/src/sim/Sim';
-import { BotController } from '../../../client/src/ai/BotController';
-import { botSeed, tuningFor, type Difficulty } from '../../../client/src/ai/BotConfig';
+import { BotController } from '../../../client/src/ai/v2/BotController';
+import { botSeed, tuningFor, type Difficulty } from '../../../client/src/ai/v2/BotConfig';
 
 /** Count SOFT bricks remaining on the map. */
 function countSoftBricks(map: Uint8Array): number {

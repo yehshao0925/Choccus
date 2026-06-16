@@ -6,7 +6,7 @@ import {
   botSeed,
   parseDifficulty,
   tuningFor,
-} from '../../../client/src/ai/BotConfig';
+} from '../../../client/src/ai/v2/BotConfig';
 
 describe('DIFFICULTY_PRESETS', () => {
   it('has easy/normal/hard keys', () => {

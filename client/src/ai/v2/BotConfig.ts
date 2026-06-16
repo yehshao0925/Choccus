@@ -2,14 +2,15 @@
  * BotConfig — AI bot difficulty presets, humanization params, and a
  * bot-private deterministic RNG.
  *
- * Determinism discipline: NO Math.random / Date.now / performance.now. Bot
- * randomness wraps Mulberry32 (see Prng.ts) and is threaded by the caller —
- * every `*Rand*` call returns `[value, newState]` and the new state MUST be
- * carried forward. This module deliberately keeps its own RNG state and MUST
- * NOT read `SimState.prng`, so bot decisions stay fully separate from the
- * simulation's RNG stream. (Math.imul is fine; only Math.random is banned.)
+ * Determinism discipline: NONE of the wall-clock / nondeterministic-random
+ * globals. Bot randomness wraps Mulberry32 (see Prng.ts) and is threaded by the
+ * caller — every `*Rand*` call returns `[value, newState]` and the new state
+ * MUST be carried forward. This module deliberately keeps its own RNG state and
+ * MUST NOT read `SimState.prng`, so bot decisions stay fully separate from the
+ * simulation's RNG stream. (Math.imul is fine; only the nondeterministic
+ * randomness source is banned.)
  */
-import { prngFloat, prngInt } from '../sim/Prng';
+import { prngFloat, prngInt } from '../../sim/Prng';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 

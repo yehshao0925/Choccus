@@ -10,15 +10,16 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-const SIM_DIR = join(
+const CLIENT_SRC = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
   '..',
   '..',
   'client',
   'src',
-  'sim',
 );
+const SIM_DIR = join(CLIENT_SRC, 'sim');
+const AI_DIR = join(CLIENT_SRC, 'ai');
 
 const BANNED = [
   'Date.now',
@@ -29,23 +30,32 @@ const BANNED = [
   'Math.sqrt',
 ];
 
-describe('determinism-hostile tokens are absent from client/src/sim', () => {
-  const files = readdirSync(SIM_DIR, { recursive: true })
-    .map(String)
-    .filter((f) => f.endsWith('.ts'));
+/** Scan every .ts under `dir` for the BANNED determinism-hostile tokens. */
+function scanDir(label: string, dir: string, minFiles: number): void {
+  describe(`determinism-hostile tokens are absent from ${label}`, () => {
+    const files = readdirSync(dir, { recursive: true })
+      .map(String)
+      .filter((f) => f.endsWith('.ts'));
 
-  it('finds the sim sources', () => {
-    expect(files.length).toBeGreaterThanOrEqual(10);
-  });
-
-  for (const file of files) {
-    it(`${file} contains no banned token`, () => {
-      const text = readFileSync(join(SIM_DIR, file), 'utf8');
-      for (const token of BANNED) {
-        expect(text.includes(token), `${file} contains banned token "${token}"`).toBe(
-          false,
-        );
-      }
+    it(`finds the ${label} sources`, () => {
+      expect(files.length).toBeGreaterThanOrEqual(minFiles);
     });
-  }
-});
+
+    for (const file of files) {
+      it(`${file} contains no banned token`, () => {
+        const text = readFileSync(join(dir, file), 'utf8');
+        for (const token of BANNED) {
+          expect(
+            text.includes(token),
+            `${file} contains banned token "${token}"`,
+          ).toBe(false);
+        }
+      });
+    }
+  });
+}
+
+// Keep the original sim scan; ALSO scan the AI modules (v2 forward-search bot:
+// BotController + commitment/forwardSearch/scenarios/dangerMap/grid/etc.).
+scanDir('client/src/sim', SIM_DIR, 10);
+scanDir('client/src/ai', AI_DIR, 5);

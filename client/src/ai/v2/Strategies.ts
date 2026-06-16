@@ -1,21 +1,17 @@
-// FROZEN AI v1 — DO NOT EDIT.
-// Immutable snapshot of the live BotController (dypm-style single-scoring loop) at the v1 milestone.
-// Used only as a versioned benchmark opponent. Never import the live BotController/Strategies here.
 /**
- * V1_STRATEGIES — the FROZEN v1 snapshot of the live bot archetypes. The four
- * preset tunings (aggressor/turtle/gambler/chaosv) are inlined VERBATIM from the
- * live Strategies.ts at the v1 milestone. They are deep-frozen so the benchmark
- * opponent's numeric knobs can never drift; the golden lock pins behaviour.
+ * Strategies — named, clearly-distinct bot AI archetypes built from the
+ * `BotTuning` knobs (see BotConfig.ts). Three archetypes occupy different
+ * corners of the original six-knob tuning space; a FOURTH (亂V/ChaosV) adds the
+ * OPTIONAL 亂V chain knobs (vChainBombs/vChainChance/vChainFoeRange). Those
+ * extra knobs are purely deterministic — they only change bomb-drop PRIORITY,
+ * never the safety gate — so every archetype stays fully lockstep-safe, and any
+ * archetype that omits them keeps the exact single-bomb behavior.
  *
- * This file self-declares the snapshot's version (AI_VERSION = 1) and MUST NOT
- * import the live version.ts.
+ * Reaction is in ticks at the fixed 60 Hz timestep; the bomb fuse is 180 ticks.
  */
-import type { BotTuning } from '../../../../client/src/ai/BotConfig';
+import type { BotTuning } from './BotConfig';
 
-/** The v1 snapshot self-declares its AI version (does NOT import live version.ts). */
-export const AI_VERSION = 1;
-
-export const V1_STRATEGIES: ReadonlyArray<{
+export const STRATEGIES: ReadonlyArray<{
   key: string;
   name: string;
   tuning: BotTuning;
@@ -88,11 +84,29 @@ export const V1_STRATEGIES: ReadonlyArray<{
   }),
 ]);
 
-/** The frozen v1 Aggressor preset. */
-export const V1_AGGRESSOR = V1_STRATEGIES.find((s) => s.key === 'aggressor')!;
-/** The frozen v1 Turtle preset. */
-export const V1_TURTLE = V1_STRATEGIES.find((s) => s.key === 'turtle')!;
-/** The frozen v1 Gambler preset. */
-export const V1_GAMBLER = V1_STRATEGIES.find((s) => s.key === 'gambler')!;
-/** The frozen v1 ChaosV preset. */
-export const V1_CHAOSV = V1_STRATEGIES.find((s) => s.key === 'chaosv')!;
+/**
+ * Resolve a named strategy by key (case-insensitive, whitespace-trimmed) to its
+ * tuning + display name. Returns undefined for any key that isn't a known
+ * archetype (callers fall back to difficulty tuning).
+ */
+export function resolveStrategy(
+  key: string,
+): { tuning: BotTuning; name: string } | undefined {
+  const k = key.toLowerCase().trim();
+  const s = STRATEGIES.find((e) => e.key === k);
+  return s === undefined ? undefined : { tuning: s.tuning, name: s.name };
+}
+
+/**
+ * Deterministically pick a strategy for a given index (mix mode): cycles
+ * through STRATEGIES by `index mod STRATEGIES.length`. Fully deterministic —
+ * no nondeterministic randomness / wall-clock — safe for lockstep / backfill.
+ */
+export function strategyForSlot(index: number): { tuning: BotTuning; name: string } {
+  const n = STRATEGIES.length;
+  // Normalize to a non-negative index even for negative inputs.
+  const i = ((Math.trunc(index) % n) + n) % n;
+  // STRATEGIES is a non-empty frozen literal, so this index is always in range.
+  const s = STRATEGIES[i] as { key: string; name: string; tuning: BotTuning };
+  return { tuning: s.tuning, name: s.name };
+}

@@ -18,7 +18,7 @@ import {
   openPassable,
   predictDanger,
   tileDangerTicks,
-} from '../../../client/src/ai/grid';
+} from '../../../client/src/ai/common/grid';
 
 const fp = makeFeelParams();
 const DIRS = [Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT];

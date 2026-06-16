@@ -82,7 +82,7 @@ export class PlayerRenderer {
       // Redraw geometry each frame (direction/color may change)
       g.clear();
 
-      const col    = playerColor(pl.slot);
+      const col    = playerColor(pl.team);
       const dark   = darken(col);
 
       // Shadow / bottom layer (offset 2px down-right)

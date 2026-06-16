@@ -1,23 +1,19 @@
 /**
- * Version bot bench: is the LIVE bot STRONGER than the frozen AI v1 snapshot?
+ * Version bot bench: is one AI version STRONGER than another in a 4-bot FFA?
  *
  *   npm run version-bench
  *
- * We pit the LIVE BotController against the FROZEN V1BotController in a pure
- * 4-bot free-for-all. To isolate DECISION LOGIC from tuning, each live
- * contestant shares its tuning numbers with a same-named v1 contestant
- * (live-Aggressor uses STRATEGIES aggressor tuning; v1-Aggressor uses the frozen
- * V1_AGGRESSOR.tuning — identical numeric knobs, only the code path differs).
- * The four FIXED contestants are:
- *   live-Aggressor (live + aggressor tuning)
- *   v1-Aggressor   (frozen v1 + V1_AGGRESSOR tuning)
- *   live-ChaosV    (live + chaosv tuning)
- *   v1-ChaosV      (frozen v1 + V1_CHAOSV tuning)
- *
- * NOTE: at the v1 milestone the live and v1 decision logic are CURRENTLY
- * IDENTICAL (v1 is a verbatim snapshot of the live bot), so this bench shows
- * ~0 difference and symmetry/draws are expected. Its value is the day the live
- * bot becomes v2: it will reveal whether v2 is stronger than the frozen v1.
+ * We pit two AI versions against each other via the version registry
+ * (client/src/ai/index.ts), defaulting to the previous version vs the latest
+ * (e.g. v1 vs v2). To isolate DECISION LOGIC from tuning, each contestant of one
+ * version shares its archetype (and thus its tuning numbers) with a same-named
+ * contestant of the other version — both ask their own version module for the
+ * same archetype key, so only the version's code path differs. The four FIXED
+ * contestants are:
+ *   vOld-Aggressor (old version + aggressor archetype)
+ *   vNew-Aggressor (new version + aggressor archetype)
+ *   vOld-ChaosV    (old version + chaosv archetype)
+ *   vNew-ChaosV    (new version + chaosv archetype)
  *
  * Each bot plays in its OWN team (teams = [0,1,2,3], pvp), so there is NO
  * teammate rescue — it is a straight last-bot-standing FFA. For each map we run
@@ -40,9 +36,12 @@ import {
   PLAYER_START_FIRE,
   PLAYER_START_SPEED_BONUS,
 } from '../../../shared/constants';
-import { BotController } from '../../../client/src/ai/BotController';
-import { type BotTuning, botSeed } from '../../../client/src/ai/BotConfig';
-import { STRATEGIES } from '../../../client/src/ai/Strategies';
+import {
+  AI_VERSIONS,
+  type BotSpec,
+  type IBotController,
+  LATEST_AI_VERSION,
+} from '../../../client/src/ai/index';
 import { makeFeelParams } from '../../../client/src/config/FeelParams';
 import { type InputFrame } from '../../../client/src/sim/InputBuffer';
 import { type PlayerState } from '../../../client/src/sim/Player';
@@ -51,8 +50,6 @@ import {
   createInitialState,
   type SimState,
 } from '../../../client/src/sim/Sim';
-import { V1BotController } from '../baselines/v1/V1BotController';
-import { V1_AGGRESSOR, V1_CHAOSV } from '../baselines/v1/v1Strategies';
 
 /** FFA player count = the fixed number of spawn corners and contestants. */
 const N = 4;
@@ -66,33 +63,32 @@ const BASE = 0x12345678;
 type MapKind = 'classic' | 'pirate';
 const MAPS: readonly MapKind[] = ['classic', 'pirate'];
 
-/** Live STRATEGIES tuning by key (numeric knobs the live bot consumes). */
-const LIVE_AGGRESSOR = STRATEGIES.find((s) => s.key === 'aggressor')!.tuning;
-const LIVE_CHAOSV = STRATEGIES.find((s) => s.key === 'chaosv')!.tuning;
+/** The two versions compared: previous vs latest (e.g. v1 vs v2). */
+const NEW_VERSION = LATEST_AI_VERSION;
+const OLD_VERSION = LATEST_AI_VERSION - 1;
+/** Difficulty is ignored when a strategy archetype is set; kept for the spec. */
+const DIFFICULTY = 'normal';
 
 /**
- * A fixed contestant: a name, whether it runs the FROZEN v1 code path, and
- * its numeric tuning. Same-named live/v1 pairs carry identical tuning so a
- * win-rate gap reflects pure decision-logic differences.
+ * A fixed contestant: a name, the AI version it runs, and its archetype key
+ * (which resolves to that version's tuning). Same-archetype old/new pairs carry
+ * identical numeric knobs, so a win-rate gap reflects pure decision-logic
+ * differences between the two versions.
  */
 interface Contestant {
   name: string;
-  isV1: boolean;
-  tuning: BotTuning;
+  version: number;
+  /** ?strategy= archetype key fed to the version module (selects the tuning). */
+  archetype: string;
 }
 
 /** The four FIXED contestants. Index = contestant id used throughout. */
 const CONTESTANTS: readonly Contestant[] = [
-  { name: 'live-Aggressor', isV1: false, tuning: LIVE_AGGRESSOR },
-  { name: 'v1-Aggressor', isV1: true, tuning: V1_AGGRESSOR.tuning },
-  { name: 'live-ChaosV', isV1: false, tuning: LIVE_CHAOSV },
-  { name: 'v1-ChaosV', isV1: true, tuning: V1_CHAOSV.tuning },
+  { name: `v${OLD_VERSION}-Aggressor`, version: OLD_VERSION, archetype: 'aggressor' },
+  { name: `v${NEW_VERSION}-Aggressor`, version: NEW_VERSION, archetype: 'aggressor' },
+  { name: `v${OLD_VERSION}-ChaosV`, version: OLD_VERSION, archetype: 'chaosv' },
+  { name: `v${NEW_VERSION}-ChaosV`, version: NEW_VERSION, archetype: 'chaosv' },
 ];
-
-/** Common controller interface both live and v1 bots satisfy. */
-interface Controller {
-  sample(state: SimState, slot: number): InputFrame;
-}
 
 /**
  * All permutations of [0..n-1] in lexicographic order (deterministic, no RNG).
@@ -173,11 +169,9 @@ function makeController(
   contestant: Contestant,
   seed: number,
   slot: number,
-): Controller {
-  if (contestant.isV1) {
-    return new V1BotController(botSeed(seed, slot), contestant.tuning, slot);
-  }
-  return new BotController(botSeed(seed, slot), contestant.tuning, slot);
+): IBotController {
+  const spec: BotSpec = { difficulty: DIFFICULTY, strategyRaw: contestant.archetype };
+  return AI_VERSIONS[contestant.version]!.createBot(seed, slot, spec);
 }
 
 /**
@@ -199,7 +193,7 @@ function runMatch(
     map: mapKind,
   });
 
-  const controllers: Controller[] = [];
+  const controllers: IBotController[] = [];
   for (let s = 0; s < N; s++) {
     controllers.push(makeController(CONTESTANTS[slotCon[s]!]!, seed, s));
   }
@@ -407,19 +401,20 @@ function printTable(mapKind: MapKind, tally: Tally, rows: Row[]): void {
 }
 
 /**
- * Print the two live-vs-v1 comparison lines (positive = live is stronger).
- * ΔWinRate is in percentage points; ΔAvgRank uses AvgRank (higher = survived
- * longer = stronger), so a positive Δ means the live bot is stronger than v1.
+ * Print the two vNew-vs-vOld comparison lines (positive = the new version is
+ * stronger). ΔWinRate is in percentage points; ΔAvgRank uses AvgRank (higher =
+ * survived longer = stronger), so a positive Δ means the new version is
+ * stronger than the old one.
  */
 function printComparisons(rows: Row[]): void {
   const byName = (name: string): Row => rows.find((r) => r.name === name)!;
   for (const archetype of ['Aggressor', 'ChaosV']) {
-    const live = byName(`live-${archetype}`);
-    const v1 = byName(`v1-${archetype}`);
-    const dWin = (live.winRate - v1.winRate) * 100;
-    const dRank = live.avgRank - v1.avgRank;
+    const vNew = byName(`v${NEW_VERSION}-${archetype}`);
+    const vOld = byName(`v${OLD_VERSION}-${archetype}`);
+    const dWin = (vNew.winRate - vOld.winRate) * 100;
+    const dRank = vNew.avgRank - vOld.avgRank;
     console.log(
-      `live vs v1 ${archetype}: ` +
+      `v${NEW_VERSION} vs v${OLD_VERSION} ${archetype}: ` +
         `ΔWinRate=${signed(dWin, 1)}%, ΔAvgRank=${signed(dRank, 2)}`,
     );
   }
@@ -427,9 +422,9 @@ function printComparisons(rows: Row[]): void {
 
 function main(): number {
   console.log(
-    'NOTE: live and v1 logic are currently IDENTICAL, so this bench shows ~0 ' +
-      'difference (symmetry/draws are expected). Its value is the day live ' +
-      'becomes v2: it will reveal whether v2 is stronger than v1.',
+    `Comparing AI v${NEW_VERSION} (latest) vs v${OLD_VERSION} via the version ` +
+      'registry. Same archetype = identical tuning on both sides, so any gap is ' +
+      'pure decision-logic difference between the two versions.',
   );
 
   const permutations = lexPermutations(N);

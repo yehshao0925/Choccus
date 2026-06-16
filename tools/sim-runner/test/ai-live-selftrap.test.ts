@@ -23,14 +23,14 @@ import { type InputFrame } from '../../../client/src/sim/InputBuffer';
 import { idx, inBounds } from '../../../client/src/sim/Map';
 import { tileOf } from '../../../client/src/sim/Player';
 import { createInitialState, tick, type SimState } from '../../../client/src/sim/Sim';
-import { BotController } from '../../../client/src/ai/BotController';
+import { BotController } from '../../../client/src/ai/v2/BotController';
 import {
   type BotTuning,
   botSeed,
   tuningFor,
   type Difficulty,
-} from '../../../client/src/ai/BotConfig';
-import { STRATEGIES } from '../../../client/src/ai/Strategies';
+} from '../../../client/src/ai/v2/BotConfig';
+import { STRATEGIES } from '../../../client/src/ai/v2/Strategies';
 import { measureSelfTrapRate } from '../src/selfkill';
 
 const SEED_START = 1;

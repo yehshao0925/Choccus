@@ -129,7 +129,7 @@ export class HudRenderer {
       let row = this.rows[i];
       if (row === undefined) {
         const swatch = new Graphics();
-        swatch.roundRect(0, 0, SWATCH, SWATCH, 3).fill(playerColor(pl.slot));
+        swatch.roundRect(0, 0, SWATCH, SWATCH, 3).fill(playerColor(pl.team));
         // Two players per row, side by side: P1+P2 on row 0, P3+P4 on row 1
         const col  = i % 2;          // 0 = left half, 1 = right half
         const rowN = Math.floor(i / 2);

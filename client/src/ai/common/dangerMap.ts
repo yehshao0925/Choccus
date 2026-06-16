@@ -1,6 +1,3 @@
-// FROZEN AI v1 — DO NOT EDIT.
-// Immutable snapshot of the live BotController (dypm-style single-scoring loop) at the v1 milestone.
-// Used only as a versioned benchmark opponent. Never import the live BotController/Strategies here.
 /**
  * Interval-aware blast danger model for the scoring-loop bot.
  *
@@ -42,9 +39,9 @@
  *
  * Bounded for performance: 15×13 map, horizon ≈ FUSE_TICKS + SPARK_TICKS.
  */
-import type { SimState } from '../../../../client/src/sim/Sim';
-import type { BombState } from '../../../../client/src/sim/Bomb';
-import { idx, inBounds } from '../../../../client/src/sim/Map';
+import type { SimState } from '../../sim/Sim';
+import type { BombState } from '../../sim/Bomb';
+import { idx, inBounds } from '../../sim/Map';
 import { MAP_COLS, MAP_ROWS, SPARK_TICKS } from '../../../../shared/constants';
 import { TileKind } from '../../../../shared/types';
 

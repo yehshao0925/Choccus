@@ -1,6 +1,3 @@
-// FROZEN AI v1 — DO NOT EDIT.
-// Immutable snapshot of the live BotController (dypm-style single-scoring loop) at the v1 milestone.
-// Used only as a versioned benchmark opponent. Never import the live BotController/Strategies here.
 /**
  * Real-time AI grid helpers: BFS pathfinding + blast-danger prediction.
  *
@@ -20,12 +17,12 @@
  * flowing outward (the real sim would chain and stop there) — over-marking is
  * safer for an AI deciding where NOT to stand.
  */
-import type { SimState } from '../../../../client/src/sim/Sim';
-import { type BombState, bombAt } from '../../../../client/src/sim/Bomb';
-import { DIRECTION_ORDER } from '../../../../client/src/sim/InputBuffer';
-import { idx, inBounds } from '../../../../client/src/sim/Map';
-import { dirDX, dirDY, isOpen } from '../../../../client/src/sim/Player';
-import { explosionAt } from '../../../../client/src/sim/Explosion';
+import type { SimState } from '../../sim/Sim';
+import { type BombState, bombAt } from '../../sim/Bomb';
+import { DIRECTION_ORDER } from '../../sim/InputBuffer';
+import { idx, inBounds } from '../../sim/Map';
+import { dirDX, dirDY, isOpen } from '../../sim/Player';
+import { explosionAt } from '../../sim/Explosion';
 import { FUSE_TICKS, MAP_COLS } from '../../../../shared/constants';
 import { Direction, TileKind } from '../../../../shared/types';
 

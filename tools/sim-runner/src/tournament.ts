@@ -29,9 +29,10 @@ import {
   PLAYER_START_FIRE,
   PLAYER_START_SPEED_BONUS,
 } from '../../../shared/constants';
-import { BotController } from '../../../client/src/ai/BotController';
-import { botSeed } from '../../../client/src/ai/BotConfig';
-import { STRATEGIES } from '../../../client/src/ai/Strategies';
+// Single-version measurement tool: pinned to the latest live AI version (v2).
+import { BotController } from '../../../client/src/ai/v2/BotController';
+import { botSeed } from '../../../client/src/ai/v2/BotConfig';
+import { STRATEGIES } from '../../../client/src/ai/v2/Strategies';
 import { makeFeelParams } from '../../../client/src/config/FeelParams';
 import { type InputFrame } from '../../../client/src/sim/InputBuffer';
 import { type PlayerState } from '../../../client/src/sim/Player';
