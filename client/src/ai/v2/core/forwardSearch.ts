@@ -20,13 +20,13 @@
  * touches SimState.prng. Anytime: returns whatever root scores exist when the
  * node cap is hit.
  */
-import type { SimState } from '../../sim/Sim';
-import { DIRECTION_ORDER } from '../../sim/InputBuffer';
-import { Direction } from '../../../../shared/types';
-import { idx, inBounds } from '../../sim/Map';
-import { dirDX, dirDY } from '../../sim/Player';
-import { bombAt } from '../../sim/Bomb';
-import type { IntervalDanger } from '../common/dangerMap';
+import type { SimState } from '../../../sim/Sim';
+import { DIRECTION_ORDER } from '../../../sim/InputBuffer';
+import { Direction } from '../../../../../shared/types';
+import { idx, inBounds } from '../../../sim/Map';
+import { dirDX, dirDY } from '../../../sim/Player';
+import { bombAt } from '../../../sim/Bomb';
+import type { IntervalDanger } from '../../common/dangerMap';
 
 /**
  * Search depth (plies of the bot's own movement explored).
@@ -101,6 +101,31 @@ export interface SearchCallbacks {
   bombGateOk: (x: number, y: number, fire: number) => boolean;
 }
 
+/**
+ * The per-map decision knobs the SEARCH reads, supplied by the active MapProfile
+ * (BotController picks classic vs pirate from SimState.mapKind and passes these
+ * in — the core never reads process.env). NEUTRAL today (== committed v2): with
+ * these values every knob is a no-op, so the search result is byte-identical to
+ * HEAD. A later per-map pass can hand classic non-neutral values to close the
+ * defer-forever / spawn-deadlock degeneracy without touching this engine.
+ *
+ * 由 MapProfile 餵入的搜尋旋鈕；目前全中性（== HEAD）。core 不讀 process.env。
+ */
+export interface SearchKnobs {
+  /**
+   * Depth discount (PERCENT per ply) on a DEFERRED bomb's reward: a bomb dropped
+   * at search depth d keeps max(0, 100 - pct*d)% of its reward. 0 = identity.
+   */
+  readonly deferredBombDiscountPct: number;
+  /** Flat INTEGER penalty subtracted from the STAY root's final score. 0 = none. */
+  readonly stayPenalty: number;
+  /**
+   * Survivability clamp ceiling: each leaf uses min(worstSurv, survEnough) before
+   * weighting. MAX_SAFE_INTEGER = the clamp never bites (HEAD behavior).
+   */
+  readonly survEnough: number;
+}
+
 const W_SURVIVE = 1000;
 
 /** Time-aware move legality vs the baseline scenario (scenario[0]). */
@@ -120,7 +145,8 @@ function moveLegal(
 
 /**
  * Run the depth-limited forward search. `base` is openPassable(state); `step`
- * is STEP_DANGER_HORIZON. `ticksPerTile` advances tickOffset per ply.
+ * is STEP_DANGER_HORIZON. `ticksPerTile` advances tickOffset per ply. `knobs`
+ * are the active MapProfile's per-map search knobs (NEUTRAL == HEAD behavior).
  */
 export function forwardSearch(
   state: SimState,
@@ -131,6 +157,7 @@ export function forwardSearch(
   stepHorizon: number,
   base: (x: number, y: number) => boolean,
   cb: SearchCallbacks,
+  knobs: SearchKnobs,
 ): ForwardSearchResult {
   void wAttack; // wAttack is already folded into cb.leafReward by the caller.
   const scenario0 = scenarios[0]!;
@@ -170,6 +197,16 @@ export function forwardSearch(
   // root that advances toward a growth target / drops a productive bomb keeps
   // that value regardless of where the deepest branch wanders (the v1 growth/
   // econ/attack pull would otherwise vanish at depth>1). Integer throughout.
+  // Deferred-bomb reward discount (per-map knob). A bomb dropped at search depth
+  // d keeps max(0, 100 - pct*d)% of its reward, so "bomb now" can outscore
+  // "wander then bomb later". With pct === 0 (neutral) this is the identity, so
+  // the carried reward is byte-identical to HEAD.
+  const discBomb = (r: number, depth: number): number =>
+    knobs.deferredBombDiscountPct === 0
+      ? r
+      : Math.floor(
+          (r * Math.max(0, 100 - knobs.deferredBombDiscountPct * depth)) / 100,
+        );
   const evalLeaf = (s: SearchState): number => {
     let worstSurv = Number.MAX_SAFE_INTEGER;
     for (const sc of scenarios) {
@@ -177,7 +214,9 @@ export function forwardSearch(
       if (surv < worstSurv) worstSurv = surv;
     }
     const penalty = cb.penaltyFor(s.x, s.y);
-    return W_SURVIVE * worstSurv + s.accReward - penalty;
+    // Clamp survivability at survEnough before weighting (per-map knob). With
+    // survEnough === MAX_SAFE_INTEGER (neutral) the clamp never bites → HEAD.
+    return W_SURVIVE * Math.min(worstSurv, knobs.survEnough) + s.accReward - penalty;
   };
 
   const recordLeaf = (s: SearchState, root: RootAction): void => {
@@ -252,7 +291,12 @@ export function forwardSearch(
       if (nodes >= NODE_CAP) {
         capped = true;
         recordLeaf(
-          { ...s, accReward: s.accReward + cb.leafReward(s.x, s.y, true, s.fire) },
+          {
+            ...s,
+            accReward:
+              s.accReward +
+              discBomb(cb.leafReward(s.x, s.y, true, s.fire), depth),
+          },
           root,
         );
         return;
@@ -262,7 +306,8 @@ export function forwardSearch(
           ...s,
           bombsPlaced: s.bombsPlaced + 1,
           activeBombs: s.activeBombs + 1,
-          accReward: s.accReward + cb.leafReward(s.x, s.y, true, s.fire),
+          accReward:
+            s.accReward + discBomb(cb.leafReward(s.x, s.y, true, s.fire), depth),
           tickOffset: s.tickOffset + ticksPerTile,
         },
         depth + 1,
@@ -338,6 +383,16 @@ export function forwardSearch(
         RootAction.PLACE_BOMB,
       );
     }
+  }
+
+  // Flat STAY penalty (per-map knob, anti defer-forever). With stayPenalty === 0
+  // (neutral) this is a no-op → HEAD behavior. Only applied when STAY actually
+  // got a finite score, so an illegal/never-expanded STAY stays -Infinity.
+  if (
+    knobs.stayPenalty !== 0 &&
+    rootScore[RootAction.STAY]! > Number.NEGATIVE_INFINITY
+  ) {
+    rootScore[RootAction.STAY]! -= knobs.stayPenalty;
   }
 
   // argmax over root actions (fixed order, strict `>`, first wins).

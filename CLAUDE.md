@@ -1,6 +1,57 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Cocoa Clash（Choccus）
 
 巧克力主題的「炸彈超人」類即時對戰遊戲。放置炸彈 → 十字範圍爆炸 → 困住 / 救援。
+
+> 下方「開發指令」與「程式架構」兩節是給 Claude Code 的工程速查；其後的一～四節是
+> **遊戲設計文件**（主題決策、法律邊界、數值參數、AI 策略），改動玩法前先讀。
+
+## 開發指令（Commands）
+
+Monorepo：npm workspaces = `client` + `tools/sim-runner`；Python relay 在 `server/`（**獨立 venv**）。下列指令在 repo 根目錄執行。
+
+| 目的 | 指令 |
+| --- | --- |
+| 安裝 JS 依賴 | `npm install` |
+| 安裝 Python 依賴 | `python3 -m venv server/.venv && server/.venv/bin/pip install -r server/requirements.txt` |
+| 前端 dev（Vite, `:5173`, hot-reload） | `npm run dev` |
+| 前端 production build（先 `tsc --noEmit` 再 vite） | `npm run build` → `client/dist/` |
+| Lint（ESLint，含 `sim/**` 決定性護欄） | `npm run lint` |
+| Sim/AI 測試（`tsc --noEmit` + vitest） | `npm test` |
+| Production serve（build + HTTP static `:8080` + WS relay `:8765`） | `npm run serve`（強制重 build：`npm run serve:rebuild`） |
+| Dev WS relay（只跑 relay, `:8765`） | `server/.venv/bin/python server/main.py` |
+| Python relay 測試 | `server/.venv/bin/python -m pytest server/tests -q` |
+
+- **跑單一前端測試**：`cd tools/sim-runner && npx vitest run test/<檔名>.test.ts`（或 `npx vitest run -t "<test 名稱>"`）。
+- **本機玩**：`npm run dev` 後開瀏覽器：`http://localhost:5173/`（預設＝線上大廳）、`?mode=solo`（單人 vs N bot）、`?mode=spectate`（看 bot 互打）、`?mode=net&room=test&autoready=1`（兩分頁自動同房開打，測連線用）。
+
+### AI bench（在 `tools/sim-runner/`，**改完 AI 必跑**）
+
+| 指令 | 用途 |
+| --- | --- |
+| `npm run matrix-bench` | 8-agent（v1×4 + v2×4）1v1 勝率矩陣，印每圖 rank-1 冠軍 |
+| `npm run version-bench` | 活 bot vs 凍結前一版，4-bot FFA，兩圖，看 ΔWinRate / ΔAvgRank |
+| `npm run replay -- fixtures/<f>.json [--jsonl]` | 跑 replay，逐 tick 印 `tick,hashHex` |
+| `npm run gen-fixtures` / `npm run update-golden` | 重產 fixtures / 故意改 sim 後重 pin `fixtures/golden.json` |
+
+## 程式架構（Code Architecture）
+
+Monorepo：`client/`（TS + Vite + Pixi.js v8 前端）、`tools/sim-runner/`（headless 決定性測試 + AI bench，跑在 Node/tsx/vitest）、`server/`（Python WebSocket relay）、`shared/`（前後端共用 `constants.ts` / `types.ts` / `protocol.ts`）、`dypm.md`（AI 評分迴圈設計參考）。
+
+**三層大圖：**
+
+1. **決定性 sim 核心（`client/src/sim/`）** — 純整數邏輯，no Pixi / no net / no wall-clock。`Sim.ts` 的 `tick()` 有**固定系統順序**（見檔頭 1–9 步）＝決定性契約，**不可重排**。座標 int32 millitiles、PRNG Mulberry32（`Prng.ts`）、hash FNV-1a（`Hash.ts`）；同 seed + 同逐 tick 輸入 ⇒ 每 client byte-identical。ESLint 對 `sim/**` 強制：禁 import pixi/render/net，禁 `Date.now`/`Math.random`/`performance.now`/`Math.sin|cos|sqrt`（見 `eslint.config.js`）。**改 sim 機制務必同步更新 AI 的爆炸射線模型（見下）並重 pin golden。**
+2. **時間 / 網路 / 渲染（`client/src/{net,render,input,ui,config}`）** — 所有 wall-clock timing 住這層。Solo 由 `main.ts` 跑 rAF + fixed-timestep accumulator 餵 sim；線上由 `net/LockstepEngine.ts` 跑 lockstep：本地輸入排到 `T + INPUT_DELAY_TICKS`、送 relay、relay echo 回**權威版本**，所有 slot 輸入到齊才推進一 tick，每 N tick 比對 `stateHash` 偵測 desync。`render/` 只在最近兩個 state 間內插。
+3. **AI bot（`client/src/ai/`）** — 純函式 `(自帶 RNG, SimState) → InputFrame`，守與 sim 同一套決定性契約 → 可在 lockstep 房補位。共用感知層（danger map / BFS / 爆炸射線，**逐字對齊 `sim/Explosion.ts`**）在 `ai/common/`。
+
+**入口與模式（`client/src/main.ts`）**：URL `?mode=` — 無＝線上大廳（`net/netMode.ts`）、`solo`、`spectate`（`spectate/spectateMode.ts`）。常用 param：`?bots= ?difficulty= ?strategy=`（archetype 或 `mix`）；net 用 `?room= ?autoready=1 ?ws= ?port=`。
+
+**Server relay（`server/`）**：`main.py`＝dev relay（純 ws）、`serve.py`＝production（HTTP static + ws）。`relay/`：`RelayServer` / `TickCoordinator`（收齊輸入才放行該 tick；斷線 slot 補 neutral ghost）/ `Lobby` / `Room`。wire = 1-byte `MsgType` + MessagePack（id 定義在 `shared/protocol.ts`，Python 端手動鏡像）。relay **只中繼輸入、不跑 sim**。
+
+**AI 版本制（`client/src/ai/`）**：每個 `ai/vN/` 是獨立、可並存的決策碼快照——**版本本身就是持久化機制，無另存 frozen baseline**（`baselines/` 已移除）。一律透過 `ai/index.ts` 的 version-agnostic factory 取用，呼叫端（`main.ts`、sim-runner）**絕不**直接 import 某 version 資料夾。每圖預設 bot ＝ matrix-bench rank-1 冠軍，定義在 `ai/mapChampions.ts`。完整版本狀態 / 強度 / 評估流程見 **`docs/ai-versions.md`**。
 
 ## 一、核心玩法
 
@@ -98,7 +149,7 @@
 
 鐵則：完全決定性（禁 `Math.random`／`Date.now`／`Math.sqrt`，失誤注入用 threaded RNG，加總與 tie-break 順序固定）→ 可用於連線房補位；不加 Web Worker／round-robin。danger map 的爆炸射線須逐字對齊 sim 的 `Explosion.ts`（連鎖取最小引爆 tick、殘留 `[t, t+27)`、軟磚停格不殘留）。
 
-策略 archetype 定義在 `client/src/ai/Strategies.ts`（旋鈕在 `BotConfig.ts`）。難度三檔（easy／normal／hard）是另一組獨立的 `DIFFICULTY_PRESET`：
+策略 archetype 定義在各版本的 `client/src/ai/v<N>/Strategies.ts`（旋鈕在同版 `BotConfig.ts`）。難度三檔（easy／normal／hard）是另一組獨立的 `DIFFICULTY_PRESET`：
 
 | 策略 | reaction | bombChance | maxEscape | aggression | 特色 | 強度（跨兩圖） |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -109,10 +160,10 @@
 
 > 強度依 5 支自打 tournament（classic + pirate 各 240 場）。原 **Hunter**（平衡 all-rounder，兩圖皆偏弱）已移除（重構前的舊 AI 已棄用、不保留）。
 
-#### AI 版本制
+#### AI 版本制（權威說明見 `docs/ai-versions.md`）
 
-當前 dypm 式 bot 定為 **AI v1**（`client/src/ai/version.ts` 的 `AI_VERSION`）。日後改 AI 邏輯就升版（v2、v3…），不再保留「新舊兩份 code」並行。
+每個 `client/src/ai/v<N>/` 是獨立、可並存的決策碼快照——**版本本身就是持久化機制**，要演進就複製成下一版（`v3/`…）原地演進，不在舊版改、也**不另存 frozen baseline**（先前的 `tools/sim-runner/baselines/` 已移除）。各版的 `AI_VERSION` 在自己的 `v<N>/version.ts`；統一從 `ai/index.ts` 的 version-agnostic factory 取用。
 
-- 每個里程碑版本凍結一份 **AI 程式碼快照** 於 `tools/sim-runner/baselines/v<N>/`（凍結的是 bot 決策 code，如 `V<N>BotController.ts` / `v<N>Strategies.ts`；**絕不** import 活的 AI）。要永久留存的就是這份 AI code 快照，v1→v2→… 演進即可。v1 已凍結於 `baselines/v1/`。
-- **不做逐 tick golden hash 鎖**：先前的 `v<N>-golden.json` / `v<N>-frozen.test.ts` 已移除。原因——baseline 為求簡單仍 import 活的 sim，任何刻意的 sim/機制改動都會讓逐幀指紋過期，分不清「故意改」與「意外壞」，雜訊大於價值。回歸保障改由 `determinism.test.ts`（決定性）＋ `version-bench`（強弱變化）負責。
-- 改完活的 AI 後跑 `npm run version-bench`（在 `tools/sim-runner/`）：活 bot vs 凍結前一版，4-bot FFA、兩張地圖（classic + pirate）、同名 preset 對打，輸出 ΔWinRate / ΔAvgRank → 一眼看出新版有沒有變強（沿用先前確認「重構 +15～26% 勝率」的同套方法）。
+- **v1**（凍結 baseline，`client/src/ai/v1/`）＝貪婪 1-ply 單層加權評分（不前瞻）。
+- **v2**（最新 / live，`AI_VERSION = 2`，`client/src/ai/v2/`）＝在 v1 評分上加 **depth-4 forward-search maximin**（3 個悲觀場景）。引擎在 `v2/core/`（`forwardSearch` / `scenarios` / `commitment`，**map-agnostic**），每張地圖的策略旋鈕收斂成一個 `MapProfile`（`v2/{classic,pirate}/MapProfile.ts`，介面在 `v2/MapProfile.ts`），`BotController` 依 `SimState.mapKind` 派發。仍是**同一版**，classic/pirate 只是同版內依地圖派發的兩組 profile。
+- **不做逐 tick golden hash 鎖 AI**：回歸保障由 `determinism.test.ts`（決定性）＋ `version-bench`（強弱變化）＋ `matrix-bench`（每圖冠軍）負責。改完活的 AI 後在 `tools/sim-runner/` 跑 `npm run version-bench`（活 bot vs 凍結前一版）與 `npm run matrix-bench`（v1×4 + v2×4 的 1v1 勝率矩陣 → 每圖 rank-1）。

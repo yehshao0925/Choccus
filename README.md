@@ -39,6 +39,16 @@ npm run dev
 
 Open two browser tabs at `http://localhost:5173/?mode=net` and play.
 
+### Solo / spectate (no relay needed)
+
+The client also runs fully offline against deterministic AI bots:
+
+| URL | Mode |
+|-----|------|
+| `http://localhost:5173/` | online lobby (default) |
+| `http://localhost:5173/?mode=solo` | one human vs N AI bots (`&bots=`, `&difficulty=`, `&strategy=`) |
+| `http://localhost:5173/?mode=spectate` | watch AI bots fight each other |
+
 ### Quick zero-click autoready (automated / CI)
 
 ```
@@ -137,33 +147,56 @@ Then open the site over `https://` — the client automatically upgrades to `wss
 ## Running tests
 
 ```sh
-# Determinism / simulation tests (40 tests, golden hashes)
+# Determinism / simulation / AI tests  (vitest: tsc --noEmit + 110 tests, golden hashes)
 npm test
 
-# Python relay server tests (46 tests)
+# Python relay server tests  (pytest: 46 tests)
 server/.venv/bin/python -m pytest server/tests -q
 ```
+
+### AI benchmarks (after changing bot logic)
+
+```sh
+cd tools/sim-runner
+npm run matrix-bench     # 1v1 win-rate matrix → per-map rank-1 champion
+npm run version-bench    # live bot vs frozen previous version (ΔWinRate / ΔAvgRank)
+```
+
+See `docs/ai-versions.md` for the authoritative AI version status, strengths, and eval flow.
 
 ---
 
 ## Architecture overview
 
+Monorepo: npm workspaces (`client` + `tools/sim-runner`) + a standalone Python relay.
+
 ```
+shared/                  — code shared client⇄server: constants.ts, types.ts,
+                           protocol.ts (1-byte MsgType + MessagePack wire format)
+
 client/src/
-  net/
-    wsUrl.ts          — WS URL resolver (same-origin, ?ws=, ?port=)
-    netMode.ts        — lobby / match orchestrator
-    NetClient.ts      — WebSocket transport (typed events)
-    NetLobby.ts       — lobby state machine
-    LockstepEngine.ts — per-tick input sync
-  sim/                — deterministic simulation (DO NOT TOUCH)
+  main.ts                — entry; URL ?mode= picks lobby (default) / solo / spectate
+  sim/                   — deterministic, integer-only simulation core
+                           (no Pixi/net/wall-clock; ESLint-guarded — keep it deterministic)
+  net/                   — lockstep netcode: wsUrl, netMode, NetClient, NetLobby,
+                           LockstepEngine (per-tick input sync), MatchRunner
+  ai/                    — deterministic bots: v1/ (frozen) + v2/ (live) snapshots,
+                           common/ (sim-aligned perception), mapChampions.ts
+  render/                — Pixi.js v8 renderers + interpolation (renders between two sim states)
+  input/ ui/ config/ audio/ — keyboard, FeelPanel, FeelParams, sound
+  spectate/              — bot-vs-bot spectator mode
 
 server/
-  main.py             — dev relay entry point  (ws only, default 8765)
-  serve.py            — production entry point (HTTP static + ws relay)
-  relay/              — RelayServer, TickCoordinator, Lobby, Room
-  tests/              — pytest suite (46 tests)
+  main.py                — dev relay entry point  (ws only, default 8765)
+  serve.py               — production entry point (HTTP static + ws relay)
+  relay/                 — RelayServer, TickCoordinator, Lobby, Room (relays input only, never runs the sim)
+  tests/                 — pytest suite
 
-scripts/
-  serve.sh            — build + serve convenience script
+tools/sim-runner/        — headless determinism tests + AI bench (matrix-bench, version-bench, replay/golden)
+scripts/serve.sh         — build + serve convenience script
+docs/ai-versions.md      — authoritative AI version status / strength / eval flow
 ```
+
+> The deterministic core (`client/src/sim/`) is the contract that makes lockstep
+> netcode and bot backfill possible: same seed + same per-tick inputs ⇒
+> byte-identical state on every client. See `CLAUDE.md` for the full design doc.

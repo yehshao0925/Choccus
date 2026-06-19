@@ -77,13 +77,17 @@ import {
   FARM_HOLD_TICKS,
   FIGHT_HOLD_TICKS,
   GoalCommitment,
-} from './commitment';
-import { MAX_SCENARIO_ENEMIES, buildScenarios } from './scenarios';
+} from './core/commitment';
+import { MAX_SCENARIO_ENEMIES, buildScenarios } from './core/scenarios';
 import {
+  type SearchKnobs,
   type SearchState,
   RootAction,
   forwardSearch,
-} from './forwardSearch';
+} from './core/forwardSearch';
+import type { MapProfile } from './MapProfile';
+import { CLASSIC_PROFILE } from './classic/MapProfile';
+import { PIRATE_PROFILE } from './pirate/MapProfile';
 
 // Live bot = current AI_VERSION (see version.ts)
 export { AI_VERSION } from './version';
@@ -360,10 +364,44 @@ export class BotController {
    */
   private readonly goal = new GoalCommitment();
 
-  constructor(rngSeed: number, tuning: BotTuning, slot: number) {
+  /**
+   * Per-map decision profile (classic / pirate). Selected LAZILY from
+   * SimState.mapKind on the first sample() and cached for the match (mapKind is
+   * a whole-match constant). null = not yet selected. Both profiles are NEUTRAL
+   * today, so this dispatch is byte-identical to committed v2 either way; the
+   * seam exists so a later pass can let classic diverge from pirate.
+   */
+  private profile: MapProfile | null = null;
+
+  /**
+   * Optional ship-safe override: when non-null it REPLACES the SimState.mapKind
+   * dispatch in profileFor(), so a caller (e.g. the throwaway sweep harness) can
+   * inject a single candidate profile into the bot. null (the default) = the
+   * normal per-map dispatch → byte-identical to committed v2.
+   */
+  private readonly profileOverride: MapProfile | null;
+
+  constructor(
+    rngSeed: number,
+    tuning: BotTuning,
+    slot: number,
+    profileOverride: MapProfile | null = null,
+  ) {
     this.rng = rngSeed >>> 0;
     this.tuning = tuning;
     this.ctorSlot = slot;
+    this.profileOverride = profileOverride;
+  }
+
+  /**
+   * Select the per-map profile. When an explicit override was supplied to the
+   * constructor it wins outright; otherwise dispatch on SimState.mapKind —
+   * classic vs pirate; any unknown value defaults to classic (a safe neutral).
+   * Pure / deterministic.
+   */
+  private profileFor(state: SimState): MapProfile {
+    if (this.profileOverride !== null) return this.profileOverride;
+    return state.mapKind === 'pirate' ? PIRATE_PROFILE : CLASSIC_PROFILE;
   }
 
   /** Bot-private uniform float in [0, 1); threads the RNG state forward. */
@@ -1284,6 +1322,12 @@ export class BotController {
   sample(state: SimState, slot: number): InputFrame {
     void this.ctorSlot; // ctor slot is debug/seed only; `slot` wins.
 
+    // Select the per-map profile once (lazily) and cache it for the match —
+    // mapKind is a whole-match constant. Both profiles are NEUTRAL today so this
+    // never changes a decision; it is the seam for a later per-map tuning pass.
+    if (this.profile === null) this.profile = this.profileFor(state);
+    const profile = this.profile;
+
     const myPlayer = state.players.find((p) => p.slot === slot);
     if (myPlayer === undefined || !myPlayer.alive || myPlayer.trapped) {
       this.resetActive();
@@ -1453,6 +1497,34 @@ export class BotController {
 
     const wAttack = this.aggressionWeight(state, foeDist, effDevFactor);
     const foeReachTiles = this.tuning.combatRangeTiles ?? 5;
+
+    // ---- DEADLOCK GROWTH RELEASE (per-map knob; NEUTRAL == HEAD) -----------
+    // An in-place bomb (inPlaceBricks > 0) normally SUPPRESSES the growth /
+    // reposition pull (growthValue returns 0 when there are bricks to bomb right
+    // here). On the closed CLASSIC spawn L-pocket a fire-2 bomb covers every
+    // reachable tile → the safety gate REJECTS it → yet the suppression still
+    // froze the bot (it could neither bomb nor be pulled to reposition). When
+    // profile.deadlockGrowthRelease is true, an in-place bomb that is NOT
+    // safely escapable (gate fails) no longer suppresses growth: treat
+    // inPlaceBricksForGrowth as 0 so the bot is pulled one tile over to a spot
+    // from which the SAME bricks ARE safely bombable. With the flag FALSE
+    // (neutral, today) we never even probe the gate and pass inPlaceBricks
+    // through verbatim → byte-identical to committed v2.
+    const inPlaceBricksForGrowth =
+      profile.deadlockGrowthRelease &&
+      inPlaceBricks > 0 &&
+      !this.computeBombGateOk(
+        state,
+        slot,
+        myTeam,
+        myX,
+        myY,
+        myPlayer.fire,
+        tpt,
+        foeReachTiles,
+      )
+        ? 0
+        : inPlaceBricks;
 
     // ---- SURVIVAL-FIRST SAFETY NET (fires FIRST, hard override) ------------
     // If our CURRENT tile will ignite within the FLEE HORIZON — sized so we have
@@ -1628,7 +1700,7 @@ export class BotController {
             growthFirstDir,
             growthDist,
             effDevFactor,
-            inPlaceBricks,
+            inPlaceBricksForGrowth,
           );
           rewardCache.set(key, v);
           return v;
@@ -1652,6 +1724,12 @@ export class BotController {
           return ok;
         },
       },
+      // Per-map search knobs from the active profile (NEUTRAL today == HEAD).
+      {
+        deferredBombDiscountPct: profile.deferredBombDiscountPct,
+        stayPenalty: profile.stayPenalty,
+        survEnough: profile.survEnough,
+      } satisfies SearchKnobs,
     );
 
     const perAction = result.perActionScores;

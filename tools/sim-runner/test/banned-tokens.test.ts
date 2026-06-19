@@ -1,8 +1,10 @@
 /**
  * Determinism-hostile token guard: a cheap backstop in case the ESLint
  * `no-restricted-properties` config for client/src/sim/** ever drifts.
- * Scans raw source text (comments included — keep banned names out of sim
- * comments too; the noise is worth the safety).
+ * Scans source with COMMENTS STRIPPED (see stripComments): the guard targets
+ * actual CALLS/uses of the banned APIs — a banned name mentioned inside a
+ * determinism note (e.g. "NO Math.random / Date.now") is harmless and must not
+ * trip the check. ESLint's no-restricted-properties stays the primary guard.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -30,6 +32,20 @@ const BANNED = [
   'Math.sqrt',
 ];
 
+/**
+ * Strip TS block and line comments before scanning so a banned name that only
+ * appears in a comment cannot trip the guard. Block comments are removed first
+ * (so a slash-slash inside a block comment is not mistaken for a line comment).
+ * The line pattern keeps a preceding non-colon char, so a "://" inside a string
+ * (e.g. a URL) is preserved. An obfuscated call that splices a block comment
+ * into a token collapses back to the bare token and is still caught.
+ */
+function stripComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
+
 /** Scan every .ts under `dir` for the BANNED determinism-hostile tokens. */
 function scanDir(label: string, dir: string, minFiles: number): void {
   describe(`determinism-hostile tokens are absent from ${label}`, () => {
@@ -43,7 +59,7 @@ function scanDir(label: string, dir: string, minFiles: number): void {
 
     for (const file of files) {
       it(`${file} contains no banned token`, () => {
-        const text = readFileSync(join(dir, file), 'utf8');
+        const text = stripComments(readFileSync(join(dir, file), 'utf8'));
         for (const token of BANNED) {
           expect(
             text.includes(token),

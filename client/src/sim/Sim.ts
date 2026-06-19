@@ -59,6 +59,14 @@ export interface SimState {
   /** Integer params derived once from FeelParams at match start. */
   readonly params: SimParams;
   readonly map: TileGrid;
+  /**
+   * Which map layout this match uses (classic / pirate …). A whole-match
+   * constant fixed at createInitialState and carried forward unchanged every
+   * tick — deliberately NOT hashed (exactly like `params.pvp` / `team`): the
+   * grid TILES it selects are hashed via map generation, the selector itself is
+   * a non-hashed match constant. Bots read it to pick a per-map decision profile.
+   */
+  readonly mapKind: MapKind;
   readonly players: readonly PlayerState[];
   readonly bombs: readonly BombState[];
   readonly explosions: readonly ExplosionState[];
@@ -94,7 +102,8 @@ export function createInitialState(
   const pvp = opts?.pvp ?? false;
   const teams = opts?.teams;
 
-  const [map, prng] = generateMap(seed >>> 0, opts?.map ?? 'classic');
+  const mapKind: MapKind = opts?.map ?? 'classic';
+  const [map, prng] = generateMap(seed >>> 0, mapKind);
 
   const params: SimParams = Object.freeze({
     moveSpeedMt: moveSpeedMt(feelParams),
@@ -121,6 +130,7 @@ export function createInitialState(
     prng,
     params,
     map,
+    mapKind,
     players,
     bombs: [],
     explosions: [],
@@ -243,6 +253,8 @@ export function tick(state: SimState, inputs: readonly InputFrame[]): SimState {
     prng,
     params: state.params,
     map: grid,
+    // mapKind is a non-hashed whole-match constant — carry it forward verbatim.
+    mapKind: state.mapKind,
     players,
     bombs,
     explosions,

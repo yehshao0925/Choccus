@@ -1,7 +1,8 @@
 /**
  * Entry point. Mode switch via URL:
- *   (default)   — online lobby (create / join / quick match); see net/netMode.ts.
- *   ?mode=solo  — solo practice: one human player vs N AI bots (last survivor wins).
+ *   (default)       — online lobby (create / join / quick match); see net/netMode.ts.
+ *   ?mode=solo      — solo practice: one human player vs N AI bots (last survivor wins).
+ *   ?mode=spectate  — bot-vs-bot spectator: watch AI bots fight (see spectate/spectateMode.ts).
  *
  * Solo mode owns ALL wall-clock timing: a rAF loop with a fixed-timestep
  * accumulator. The sim only ever receives whole ticks; rendering interpolates
@@ -29,6 +30,7 @@ import {
   LATEST_AI_VERSION,
   parseDifficulty,
 } from './ai';
+import { championFor } from './ai/mapChampions';
 import { matchSound } from './audio/MatchSound';
 import { sfx } from './audio/Sfx';
 import { type FeelParams, makeFeelParams } from './config/FeelParams';
@@ -39,6 +41,7 @@ import { Renderer } from './render/Renderer';
 import { type InputFrame, NO_INPUT } from './sim/InputBuffer';
 import type { MapKind } from './sim/Map';
 import { type SimState, createInitialState, tick } from './sim/Sim';
+import { runSpectate } from './spectate/spectateMode';
 import { FeelPanel } from './ui/FeelPanel';
 
 /**
@@ -103,24 +106,62 @@ async function bootstrapSolo(params: URLSearchParams): Promise<void> {
   // absent) → every bot runs the latest version. Version choice is a render/
   // factory concern only; it NEVER enters SimState/stateHash.
   const strategyRaw = (params.get('strategy') ?? '').toLowerCase().trim();
-  // Version-agnostic spec handed to the chosen AI version module per slot.
-  const botSpec: BotSpec = { difficulty, strategyRaw };
+  // Did the user give an EXPLICIT strategy override? Any ?strategy= value
+  // (including 'mix'/'random') counts as explicit and must win over the per-map
+  // champion default and the bot-strength picker. When absent ('') the
+  // bot-strength mode decides (see botMode / effectiveSpec below).
+  const explicitStrategy = strategyRaw !== '';
+
+  // Bot-strength mode (on-screen picker, strong → weak): 'champion' uses the
+  // current map's matrix-bench champion archetype (ChaosV on classic, Aggressor
+  // on pirate; HUD shows the archetype name); 'hard'/'normal'/'easy' use a
+  // generic bot on that DIFFICULTY_PRESETS tier (no archetype; HUD shows the
+  // tier name). Mutable so the picker can change it; reset() rebuilds the bots.
+  // Initial value: when ?strategy= is explicit the picker is disabled and not
+  // the controlling input, so default to 'champion'; otherwise honor an explicit
+  // ?difficulty= tier, else 'champion'.
+  type BotMode = 'champion' | 'easy' | 'normal' | 'hard';
+  const initialBotMode = (): BotMode => {
+    if (explicitStrategy) return 'champion';
+    const d = params.get('difficulty');
+    if (d !== null) {
+      const v = d.toLowerCase().trim();
+      if (v === 'easy' || v === 'normal' || v === 'hard') return v;
+    }
+    return 'champion';
+  };
+  let botMode: BotMode = initialBotMode();
+
+  // Version-agnostic spec handed to the chosen AI version module per slot. Map-
+  // dependent so switching maps re-derives the champion (reset() rebuilds bots).
+  // Precedence: an explicit ?strategy= URL archetype wins on every map; else the
+  // bot-strength picker decides — 'champion' → the map champion archetype (HUD
+  // shows the archetype name); a difficulty tier → empty strategy so
+  // tuningForSlot picks that DIFFICULTY_PRESETS tier (HUD shows the tier name).
+  const effectiveSpec = (map: MapKind): BotSpec => {
+    if (explicitStrategy) return { difficulty, strategyRaw };
+    if (botMode === 'champion') {
+      return { difficulty, strategyRaw: championFor(map).archetype };
+    }
+    return { difficulty: botMode, strategyRaw: '' };
+  };
 
   // Parse ?botVersions= into a per-bot-index list of AI version numbers.
   const versionList: number[] = (params.get('botVersions') ?? '')
     .split(',')
     .map((s) => Number.parseInt(s.trim(), 10));
-  // AI version for an AI slot (1..bots). bot index = slot - 1. Unknown/missing
-  // entries fall back to the latest registered version.
-  const versionForSlot = (slot: number): number => {
+  // AI version for an AI slot (1..bots) on a given map. bot index = slot - 1. An
+  // explicit ?botVersions= entry wins; otherwise the map champion's version
+  // (driven by the champion table, not bare LATEST_AI_VERSION).
+  const versionForSlot = (slot: number, map: MapKind): number => {
     const v = versionList[slot - 1];
     return v !== undefined && Number.isFinite(v) && AI_VERSIONS[v] !== undefined
       ? v
-      : LATEST_AI_VERSION;
+      : championFor(map).version;
   };
-  // The AI version module driving a given AI slot.
-  const moduleForSlot = (slot: number): (typeof AI_VERSIONS)[number] =>
-    AI_VERSIONS[versionForSlot(slot)]!;
+  // The AI version module driving a given AI slot on a given map.
+  const moduleForSlot = (slot: number, map: MapKind): (typeof AI_VERSIONS)[number] =>
+    AI_VERSIONS[versionForSlot(slot, map)]!;
 
   // Render-layer-only slot→label table (index = player slot). slot 0 = human.
   // NEVER goes into SimState/stateHash; consumed solely by the HUD. Rebuilt on
@@ -129,8 +170,8 @@ async function bootstrapSolo(params: URLSearchParams): Promise<void> {
   // name, suffixed with ` vN` when the slot is not on the latest version so a
   // mixed-version match is legible in the HUD (render-only).
   const botName = (slot: number): string => {
-    const version = versionForSlot(slot);
-    const base = AI_VERSIONS[version]!.botNameFor(slot, botSpec);
+    const version = versionForSlot(slot, mapKind);
+    const base = AI_VERSIONS[version]!.botNameFor(slot, effectiveSpec(mapKind));
     return version === LATEST_AI_VERSION ? base : `${base} v${version}`;
   };
   const buildSlotLabels = (): (string | undefined)[] => {
@@ -148,14 +189,34 @@ async function bootstrapSolo(params: URLSearchParams): Promise<void> {
     return labels;
   };
 
+  // Human-readable label for the current bot-strength mode (render-only). For
+  // 'champion' it appends the map's champion archetype display name (e.g.
+  // "Champion (ChaosV)"); for a difficulty tier it shows the capitalized tier
+  // (e.g. "Hard"). An explicit ?strategy= override (picker disabled) shows the
+  // archetype name driving every bot instead.
+  const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+  const buildStrengthLabel = (): string => {
+    if (explicitStrategy) {
+      return AI_VERSIONS[championFor(mapKind).version]!.botNameFor(1, effectiveSpec(mapKind));
+    }
+    if (botMode === 'champion') {
+      const champName = AI_VERSIONS[championFor(mapKind).version]!.botNameFor(
+        1,
+        effectiveSpec(mapKind),
+      );
+      return `Champion (${champName})`;
+    }
+    return cap(botMode);
+  };
+
   // Render-layer-only HUD hint text. Rebuilt on every reset() so the bot count
-  // shown tracks the current picker selection.
+  // and bot-strength mode shown track the current picker selections.
   const buildHint = (): string => {
     if (format === '2v2') {
-      return `2v2 Team (${difficulty}) — Arrows move · Space drops chocolate`;
+      return `2v2 Team (${buildStrengthLabel()}) — Arrows move · Space drops chocolate`;
     }
     return bots > 0
-      ? `Solo +${bots} AI (${difficulty}) — Arrows move · Space drops chocolate`
+      ? `Solo +${bots} AI (${buildStrengthLabel()}) — Arrows move · Space drops chocolate`
       : 'Solo — Arrows move · Space drops chocolate';
   };
 
@@ -190,7 +251,7 @@ async function bootstrapSolo(params: URLSearchParams): Promise<void> {
   const buildBots = (): IBotController[] => {
     const arr: IBotController[] = [];
     for (let slot = 1; slot <= effectiveBots(); slot++) {
-      arr.push(moduleForSlot(slot).createBot(seed, slot, botSpec));
+      arr.push(moduleForSlot(slot, mapKind).createBot(seed, slot, effectiveSpec(mapKind)));
     }
     return arr;
   };
@@ -353,6 +414,42 @@ async function bootstrapSolo(params: URLSearchParams): Promise<void> {
   document.body.appendChild(formatPicker);
   syncBotPicker();
 
+  // Solo bot-strength picker (fourth row, below the format picker). One dropdown
+  // strong → weak: 'Champion' uses the current map's champion archetype (stays
+  // map-reactive via reset() → effectiveSpec(mapKind)); the difficulty tiers run
+  // a generic bot on that DIFFICULTY_PRESETS tier. Disabled when ?strategy= is
+  // explicit (that URL override wins over the picker on every map).
+  const strengthPicker = document.createElement('select');
+  strengthPicker.style.cssText =
+    'position:fixed;top:116px;left:8px;z-index:900;padding:6px 12px;' +
+    'background:rgba(61,28,2,0.85);color:#f5e6d3;border:none;border-radius:8px;' +
+    'font:13px system-ui,sans-serif;cursor:pointer;';
+  const strengthOptions: ReadonlyArray<readonly [BotMode, string]> = [
+    ['champion', "Champion (map's best)"],
+    ['hard', 'Hard'],
+    ['normal', 'Normal'],
+    ['easy', 'Easy'],
+  ];
+  for (const [value, label] of strengthOptions) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    if (value === botMode) opt.selected = true;
+    strengthPicker.appendChild(opt);
+  }
+  strengthPicker.addEventListener('change', () => {
+    botMode = strengthPicker.value as BotMode;
+    reset();
+  });
+  document.body.appendChild(strengthPicker);
+  // Grey + disable when an explicit ?strategy= override is controlling the bots,
+  // mirroring syncBotPicker's disable pattern. Static (explicitStrategy is fixed
+  // for the session), so applied once here.
+  if (explicitStrategy) {
+    strengthPicker.disabled = true;
+    strengthPicker.style.opacity = '0.4';
+  }
+
   // "Click anywhere to enable sound" hint.
   const soundHint = document.createElement('div');
   soundHint.style.cssText =
@@ -403,7 +500,10 @@ async function bootstrapSolo(params: URLSearchParams): Promise<void> {
 }
 
 const params = new URLSearchParams(window.location.search);
-if (params.get('mode') === 'solo') {
+const mode = params.get('mode');
+if (mode === 'spectate') {
+  void runSpectate(params);
+} else if (mode === 'solo') {
   void bootstrapSolo(params);
 } else {
   // Default (and ?mode=net) → online lobby.

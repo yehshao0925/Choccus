@@ -11,7 +11,7 @@
  *
  * Zero RNG, all integer; pure view (never touches SimState / its prng).
  */
-import { idx } from '../../sim/Map';
+import { idx } from '../../../sim/Map';
 
 /** Ticks a FIGHT goal is held before a challenger can flip it. */
 export const FIGHT_HOLD_TICKS = 20;

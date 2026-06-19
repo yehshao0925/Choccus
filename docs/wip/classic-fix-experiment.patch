@@ -1,0 +1,332 @@
+diff --git a/client/src/ai/v2/BotController.ts b/client/src/ai/v2/BotController.ts
+index e985d93..29c1ff8 100644
+--- a/client/src/ai/v2/BotController.ts
++++ b/client/src/ai/v2/BotController.ts
+@@ -176,6 +176,37 @@ const SURV_SAFE_BONUS = 6;
+ /** Reference soft-brick count for the aggression progress factor. */
+ const TOTAL_SOFT_REF = 80;
+ 
++// ---------------------------------------------------------------------------
++// ESCAPE-SPACE SQUEEZE (offense): how much a hypothetical bomb SHRINKS a nearby
++// foe's reachable truly-safe space, scored EVEN WHEN the blast does not cover
++// the foe's current tile (the direct-hit term `5 - escapes` already handles
++// that case). This is the "compress the opponent's reachable safe space" engine
++// — a bomb that walls off a foe's escape lane / herds him into a dead end now
++// earns score instead of zero. See enemyPressure().
++//
++// `squeeze` = max(0, before - after) where before/after are integer counts of
++// the foe's reachable truly-safe tiles (enemyEscapeSpace) against the baseline
++// danger vs. baseline + our hypothetical bomb. Sizing rationale:
++//  - The direct-hit term is 1..5. A squeeze count delta can reach ~10+, so the
++//    PER-TILE weight is kept SMALL (1) and the contribution is additive: a bomb
++//    that both hits the foe AND squeezes scores the most, but a pure squeeze can
++//    still register. Max realistic squeeze*W ≈ low tens ≪ W_SURVIVE (1000, and
++//    taken as the scenario MIN safety floor), so it never trades away survival.
++//  - These are NOT the research's 9×9 single-bomb constants (KILL_BONUS=50 etc.);
++//    our arena is 15×13 with chains, so they are sized for THIS scale and left
++//    conservative — the benchmark decides the final values.
++// ---------------------------------------------------------------------------
++/** Per-tile weight of the escape-space squeeze (delta in foe safe-tile count). */
++const W_SQUEEZE = 1;
++/**
++ * If a bomb cuts a foe from > this many reachable safe tiles down to <= this
++ * many, add TRAP_BONUS — it has herded him to the edge of a dead end. Small (2)
++ * so it fires only on a genuine near-trap, not on routine pressure.
++ */
++const SQUEEZE_TRAP_THRESHOLD = 2;
++/** Flat bonus when a squeeze drops a foe to <= SQUEEZE_TRAP_THRESHOLD safe tiles. */
++const SQUEEZE_TRAP_BONUS = 4;
++
+ // ---------------------------------------------------------------------------
+ // GROWTH DRIVE (fix for "stops farming bricks/items too early").
+ //
+@@ -806,10 +837,78 @@ export class BotController {
+     return n;
+   }
+ 
++  /**
++   * enemyEscapeSpace(state, danger, ex, ey) — INTEGER count of the truly-safe
++   * tiles a foe standing at (ex,ey) can still reach, under `danger`. Mirrors the
++   * survivability() flood SKELETON (same openPassable base, same
++   * earliestLethal/horizon rules, same SURV_FLOOD_CAP bound, same "don't flood
++   * through a tile that ignites within the near horizon"), but returns a PLAIN
++   * COUNT — not survivability()'s weighted score (whose SURV_SAFE_BONUS etc.
++   * would dwarf an offense term). This is the foe's `escape_space`: how many
++   * permanently-safe (never-lethal within SURV_SAFE_HORIZON) tiles he can still
++   * stand on. Shrinking it across before/after danger maps is the squeeze signal.
++   *
++   * If the foe's own tile is already lethal within the reaction window the foe is
++   * effectively cornered → count 0 (the direct-hit term, not squeeze, handles a
++   * foe we are about to cover). Pure / prng-free / integer.
++   */
++  private enemyEscapeSpace(
++    state: SimState,
++    danger: IntervalDanger,
++    ex: number,
++    ey: number,
++  ): number {
++    const startIdx = idx(ex, ey);
++    const startEarliest = danger.earliestLethal(startIdx);
++    if (startEarliest !== undefined && startEarliest <= SURV_REACTION_WINDOW) {
++      return 0;
++    }
++
++    const base = openPassable(state);
++    const visited = new Set<number>([startIdx]);
++    const queue: number[] = [startIdx];
++    let cursor = 0;
++    let safeCount = 0;
++
++    while (cursor < queue.length && visited.size <= SURV_FLOOD_CAP) {
++      const cur = queue[cursor];
++      cursor += 1;
++      if (cur === undefined) continue;
++      const cx = cur % MAP_COLS;
++      const cy = (cur - cx) / MAP_COLS;
++      const earliest = danger.earliestLethal(cur);
++      // Count ONLY truly-safe tiles (never lethal within the whole escape
++      // horizon) — exactly survivability()'s "reachedTrulySafe" predicate.
++      if (earliest === undefined || earliest > SURV_SAFE_HORIZON) {
++        safeCount += 1;
++      }
++
++      for (const d of DIRECTION_ORDER) {
++        const nx = cx + dirDX(d);
++        const ny = cy + dirDY(d);
++        if (!inBounds(nx, ny)) continue;
++        const nIdx = idx(nx, ny);
++        if (visited.has(nIdx)) continue;
++        if (!base(nx, ny)) continue;
++        // Don't flood through a tile that ignites within the near horizon: the
++        // foe could not pass it before it is on fire.
++        const nEarliest = danger.earliestLethal(nIdx);
++        if (nEarliest !== undefined && nEarliest <= STEP_DANGER_HORIZON) continue;
++        visited.add(nIdx);
++        queue.push(nIdx);
++      }
++    }
++    return safeCount;
++  }
++
+   /**
+    * enemyPressure(a) — offense term.
+    * PLACE_BOMB: value if the cross hits an enemy CURRENT tile; higher when that
+-   * enemy has FEW non-lethal escapes. Camping: STAY/move ending ADJACENT to a
++   * enemy has FEW non-lethal escapes (direct-hit term). PLUS an escape-space
++   * SQUEEZE sub-term scored over nearby attackable foes whether or not the blast
++   * covers their current tile — it rewards a bomb that shrinks a foe's reachable
++   * truly-safe space (walling off escape lanes / herding into a dead end), the
++   * real attack engine v2 was missing. Camping: STAY/move ending ADJACENT to a
+    * TRAPPED enemy → value for running down its shell. ZERO if the blast would
+    * also hit a teammate, or the targeted enemy has a teammate adjacent.
+    */
+@@ -844,7 +943,51 @@ export class BotController {
+         const v = 5 - escapes;
+         if (v > best) best = v;
+       }
+-      return best;
++
++      // ESCAPE-SPACE SQUEEZE. For each NEARBY attackable foe — whether or not the
++      // blast covers his current tile — measure how much THIS bomb shrinks his
++      // reachable truly-safe space. `before` uses the baseline `danger` (=
++      // scenarios[0], live bombs only); `after` overlays our hypothetical bomb
++      // (existing bombs are already in `state`, so before/after differ ONLY by
++      // this drop). The after-danger map is built ONCE per (tile, this bomb) and
++      // — because enemyPressure is called from leafReward behind rewardCache
++      // (keyed tile+bombHere) — computed at most once per tile per decision tick,
++      // NOT per search leaf. Reuses buildDangerMap + hypotheticalBomb (the same
++      // geometry scenarios.ts / the bomb gate use), so the blast model matches
++      // the sim exactly. Take the MAX squeeze over candidate foes (like `best`)
++      // and ADD it to the bomb-branch value.
++      let afterDanger: IntervalDanger | null = null;
++      let bestSqueeze = 0;
++      for (const p of state.players) {
++        if (p.slot === slot || p.team === myTeam) continue;
++        if (!p.alive || p.trapped) continue;
++        const ex = tileOf(p.posX);
++        const ey = tileOf(p.posY);
++        // Friendly re-rescue likely → not worth squeezing this foe.
++        if (this.foeHasAllyAdjacent(state, p.slot, p.team, ex, ey)) continue;
++        // Limit to foes within a sensible BFS-ish range (Manhattan as a cheap
++        // pre-filter): a bomb cannot meaningfully squeeze a far-off foe, and we
++        // avoid building the after-map / flooding for irrelevant enemies.
++        const range = this.tuning.combatRangeTiles ?? 5;
++        if (Math.abs(ex - cand.rx) + Math.abs(ey - cand.ry) > range) continue;
++        const before = this.enemyEscapeSpace(state, danger, ex, ey);
++        if (before <= 0) continue; // already cornered; direct-hit term covers it.
++        if (afterDanger === null) {
++          afterDanger = buildDangerMap(state, [
++            hypotheticalBomb(cand.rx, cand.ry, fire, slot),
++          ]);
++        }
++        const after = this.enemyEscapeSpace(state, afterDanger, ex, ey);
++        const squeeze = Math.max(0, before - after);
++        let contrib = W_SQUEEZE * squeeze;
++        // Trap bonus: herded the foe from > threshold down to <= threshold.
++        if (before > SQUEEZE_TRAP_THRESHOLD && after <= SQUEEZE_TRAP_THRESHOLD) {
++          contrib += SQUEEZE_TRAP_BONUS;
++        }
++        if (contrib > bestSqueeze) bestSqueeze = contrib;
++      }
++
++      return best + bestSqueeze;
+     }
+ 
+     // Camping: result tile ADJACENT to a trapped ENEMY → run down its shell.
+@@ -1454,6 +1597,28 @@ export class BotController {
+     const wAttack = this.aggressionWeight(state, foeDist, effDevFactor);
+     const foeReachTiles = this.tuning.combatRangeTiles ?? 5;
+ 
++    // [EXPERIMENT] Deadlock fix: an in-place bomb only suppresses the growth /
++    // reposition pull if it is ALSO escapable (gate passes). On the classic
++    // spawn L-pocket a fire-2 bomb covers every reachable tile → gate rejects it →
++    // but inPlaceBricks>0 was still suppressing growth, freezing the bot. When the
++    // in-place bomb is gated out, treat inPlaceBricks as 0 so growth repositions
++    // the bot to an adjacent tile from which the same bricks ARE safely bombable.
++    const __fixDeadlock = process.env.FIX_DEADLOCK === '1';
++    const inPlaceBombable =
++      inPlaceBricks > 0 &&
++      this.computeBombGateOk(
++        state,
++        slot,
++        myTeam,
++        myX,
++        myY,
++        myPlayer.fire,
++        tpt,
++        foeReachTiles,
++      );
++    const inPlaceBricksForGrowth =
++      __fixDeadlock && !inPlaceBombable ? 0 : inPlaceBricks;
++
+     // ---- SURVIVAL-FIRST SAFETY NET (fires FIRST, hard override) ------------
+     // If our CURRENT tile will ignite within the FLEE HORIZON — sized so we have
+     // the lead time to clear a full maxEscapeLen route at our current speed —
+@@ -1628,7 +1793,7 @@ export class BotController {
+             growthFirstDir,
+             growthDist,
+             effDevFactor,
+-            inPlaceBricks,
++            inPlaceBricksForGrowth,
+           );
+           rewardCache.set(key, v);
+           return v;
+@@ -1648,12 +1813,32 @@ export class BotController {
+             tpt,
+             foeReachTiles,
+           );
++          if (process.env.SURV_DEBUG) {
++            const g = globalThis as any;
++            if (ok) g.__gate_ok = (g.__gate_ok ?? 0) + 1;
++            else g.__gate_no = (g.__gate_no ?? 0) + 1;
++          }
+           gateCache.set(key, ok);
+           return ok;
+         },
+       },
+     );
+ 
++    if (process.env.SURV_DEBUG2 && slot === 0) {
++      const g = globalThis as any;
++      g.__dbg2 = (g.__dbg2 ?? 0) + 1;
++      const lo = Number(process.env.DBG_LO ?? '0');
++      const hi = Number(process.env.DBG_HI ?? '16');
++      if (g.__dbg2 >= lo && g.__dbg2 <= hi) {
++        const ps = result.perActionScores.map((v) =>
++          v === Number.NEGATIVE_INFINITY ? '-inf' : String(v),
++        );
++        console.error(
++          `#${g.__dbg2} t=${state.tick} pos=(${myX},${myY}) fire=${myPlayer.fire} can=${myPlayer.cannon} bricks=${inPlaceBricks} bombable=${inPlaceBombable ? 1 : 0} grDir=${growthFirstDir} grDist=${growthDist} dev=${effDevFactor} | STAY=${ps[0]} U=${ps[1]} D=${ps[2]} L=${ps[3]} R=${ps[4]} BOMB=${ps[5]} best=${result.bestAction}`,
++        );
++      }
++    }
++
+     const perAction = result.perActionScores;
+     // Map a root action to its first-step direction.
+     const actionDir = (a: RootAction): number => {
+diff --git a/client/src/ai/v2/forwardSearch.ts b/client/src/ai/v2/forwardSearch.ts
+index fd3d23a..93187d1 100644
+--- a/client/src/ai/v2/forwardSearch.ts
++++ b/client/src/ai/v2/forwardSearch.ts
+@@ -170,14 +170,32 @@ export function forwardSearch(
+   // root that advances toward a growth target / drops a productive bomb keeps
+   // that value regardless of where the deepest branch wanders (the v1 growth/
+   // econ/attack pull would otherwise vanish at depth>1). Integer throughout.
++  const __ENOUGH = Number(process.env.SURV_ENOUGH ?? '0') || Number.MAX_SAFE_INTEGER;
++  // [EXPERIMENT] depth discount on DEFERRED bomb reward (percent per ply). The
++  // root PLACE_BOMB (depth 0) keeps full reward; a bomb dropped at depth d inside
++  // a STAY/MOVE subtree keeps only max(0,100-DISC*d)% — so "bomb now" beats
++  // "wander then bomb later", closing the defer-forever degeneracy.
++  const __DISC = Number(process.env.BOMB_DISC ?? '0') || 0;
++  const discBomb = (r: number, depth: number): number =>
++    __DISC === 0 ? r : Math.floor((r * Math.max(0, 100 - __DISC * depth)) / 100);
++  if (process.env.SURV_DEBUG && (globalThis as any).__surv_printed !== true) {
++    (globalThis as any).__surv_printed = true;
++    console.error('[forwardSearch] __ENOUGH =', __ENOUGH);
++  }
+   const evalLeaf = (s: SearchState): number => {
+     let worstSurv = Number.MAX_SAFE_INTEGER;
+     for (const sc of scenarios) {
+       const surv = cb.survivability(sc, s.x, s.y);
+       if (surv < worstSurv) worstSurv = surv;
+     }
++    if (process.env.SURV_DEBUG) {
++      const g = globalThis as any;
++      g.__surv_min = Math.min(g.__surv_min ?? 1e9, worstSurv);
++      g.__surv_max = Math.max(g.__surv_max ?? -1e9, worstSurv);
++      g.__surv_n = (g.__surv_n ?? 0) + 1;
++    }
+     const penalty = cb.penaltyFor(s.x, s.y);
+-    return W_SURVIVE * worstSurv + s.accReward - penalty;
++    return W_SURVIVE * Math.min(worstSurv, __ENOUGH) + s.accReward - penalty;
+   };
+ 
+   const recordLeaf = (s: SearchState, root: RootAction): void => {
+@@ -252,7 +270,7 @@ export function forwardSearch(
+       if (nodes >= NODE_CAP) {
+         capped = true;
+         recordLeaf(
+-          { ...s, accReward: s.accReward + cb.leafReward(s.x, s.y, true, s.fire) },
++          { ...s, accReward: s.accReward + discBomb(cb.leafReward(s.x, s.y, true, s.fire), depth) },
+           root,
+         );
+         return;
+@@ -262,7 +280,7 @@ export function forwardSearch(
+           ...s,
+           bombsPlaced: s.bombsPlaced + 1,
+           activeBombs: s.activeBombs + 1,
+-          accReward: s.accReward + cb.leafReward(s.x, s.y, true, s.fire),
++          accReward: s.accReward + discBomb(cb.leafReward(s.x, s.y, true, s.fire), depth),
+           tickOffset: s.tickOffset + ticksPerTile,
+         },
+         depth + 1,
+@@ -340,6 +358,12 @@ export function forwardSearch(
+     }
+   }
+ 
++  // [EXPERIMENT] flat STAY penalty to test the defer-forever hypothesis.
++  const __stayPen = Number(process.env.STAY_PENALTY ?? '0') || 0;
++  if (__stayPen !== 0 && rootScore[RootAction.STAY]! > Number.NEGATIVE_INFINITY) {
++    rootScore[RootAction.STAY]! -= __stayPen;
++  }
++
+   // argmax over root actions (fixed order, strict `>`, first wins).
+   let bestAction = RootAction.STAY;
+   let best = Number.NEGATIVE_INFINITY;
+@@ -350,6 +374,16 @@ export function forwardSearch(
+     }
+   }
+ 
++  if (process.env.SURV_DEBUG) {
++    const g = globalThis as any;
++    g.__act = g.__act ?? [0, 0, 0, 0, 0, 0];
++    g.__act[bestAction] += 1;
++    // Was PLACE_BOMB root even legal (got a finite score)?
++    if (rootScore[RootAction.PLACE_BOMB]! > Number.NEGATIVE_INFINITY) {
++      g.__bomb_legal = (g.__bomb_legal ?? 0) + 1;
++    }
++    g.__decisions = (g.__decisions ?? 0) + 1;
++  }
+   return {
+     bestAction,
+     score: best,

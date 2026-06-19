@@ -232,6 +232,11 @@ export function runMatchSeeded(
   agents: Agent[],
   mapKind: MapKind,
   n: number = N,
+  makeCtrl: (agent: Agent, seed: number, slot: number) => IBotController = (
+    a,
+    s,
+    slot,
+  ) => makeController(a.version, a.archetypeKey, s, slot),
 ): MatchRecord {
   const teams = Array.from({ length: n }, (_, i) => i);
   let state: SimState = createInitialState(seed, makeFeelParams(), n, {
@@ -243,7 +248,7 @@ export function runMatchSeeded(
   const controllers: IBotController[] = [];
   for (let s = 0; s < n; s++) {
     const a = agents[slotAgent[s]!]!;
-    controllers.push(makeController(a.version, a.archetypeKey, seed, s));
+    controllers.push(makeCtrl(a, seed, s));
   }
 
   const elimTick: number[] = new Array(n).fill(-1);

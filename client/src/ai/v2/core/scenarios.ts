@@ -12,14 +12,14 @@
  * PURE / prng-free: never reads or advances SimState.prng, never calls tick().
  * All iteration is in fixed order (state.players array order, DIRECTION_ORDER).
  */
-import type { SimState } from '../../sim/Sim';
-import type { BombState } from '../../sim/Bomb';
-import { DIRECTION_ORDER } from '../../sim/InputBuffer';
-import { idx, inBounds } from '../../sim/Map';
-import { dirDX, dirDY, tileOf } from '../../sim/Player';
-import { FUSE_TICKS } from '../../../../shared/constants';
-import { bfsReachable, hypotheticalBomb, openPassable } from '../common/grid';
-import { type IntervalDanger, buildDangerMap } from '../common/dangerMap';
+import type { SimState } from '../../../sim/Sim';
+import type { BombState } from '../../../sim/Bomb';
+import { DIRECTION_ORDER } from '../../../sim/InputBuffer';
+import { idx, inBounds } from '../../../sim/Map';
+import { dirDX, dirDY, tileOf } from '../../../sim/Player';
+import { FUSE_TICKS } from '../../../../../shared/constants';
+import { bfsReachable, hypotheticalBomb, openPassable } from '../../common/grid';
+import { type IntervalDanger, buildDangerMap } from '../../common/dangerMap';
 
 /** Cap on how many nearest enemies contribute hypothetical pressure bombs. */
 export const MAX_SCENARIO_ENEMIES = 2;
