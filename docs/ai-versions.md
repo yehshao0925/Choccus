@@ -166,3 +166,28 @@ v3 從 v2 原封複製後演進（v2 凍結不動）。**2026-06-20 大改：勝
 **決定性**：所有新增皆整數、BFS、固定順序、strict `>`；Noise/Reactive 只用 threaded bot RNG；無 `Math.random/Date.now/sqrt/sin/cos/performance`（`banned-tokens.test` 掃 `client/src/ai` 含 v3）。
 
 > 不做逐 tick golden hash 鎖 AI：回歸保障由 `determinism.test`＋`v3-bench`（KILL-EDGE）＋`kill-probe` 機制診斷負責。
+
+## 七、Bradley-Terry 版本量尺（v4／v5 開發用）
+
+> 目的：把 **v3 roster 當固定量尺**，之後 v4／v5 各開發**單一策略**，只跟 v3 池 1v1 打「夠用」場次，靠 Bradley-Terry 從**稀疏** pairwise 結果反推出**全體**在同一 Elo 尺度上的評分——舊版對局結果保留為資料、永不重跑，新版只補打跟池子的對局即可。
+
+**模型**：每個 agent 有潛在強度 β，`P(i 贏 j) = σ(β_i − β_j)`。用 MM（minorisation–maximisation）迭代從 win/games tally 解 MLE（梯度自由、單調收斂、純整數外只用 `exp/log/abs`，決定性）。平手算 0.5；弱「對 phantom 平局」prior 讓全勝／全敗 agent 不發散。β 只有差值有意義 → **錨定 v3 池均值 = Elo 1500**，使「1500 = 平均 v3」跨重擬合穩定、v4／v5 直接可比（即使彼此沒對打，透過共同 v3 對手聯合估計）。
+
+**勝負編碼（sudden-death 後）**：贏 = 在時限內擊殺對手（炸死**或**縮圈壓死），同 tick 互炸 = 0.5 平手。farming 拖超時已機制性不可能，故**無**「超時＝判輸」特例。
+
+**非遞移診斷**：v3 是刻意 RPS 環，BT（單一尺度）會壓縮環內差距——這是特性不是 bug。`bt-rank` 另印**逐對手「觀測 vs BT 預測」殘差**，殘差大負＝該策略被某 v3 archetype 剋（單一 Elo 看不到的非遞移訊號）。
+
+**程式**（`tools/sim-runner/`）：
+- `bradley-terry.ts`：純 BT 引擎（MM 擬合、錨定、log-likelihood、勝率預測、連通性 union-find 護欄）。
+- `bt-history.ts`：per-map 持久化對戰歷史（`bt-history/{classic,pirate}.json`），canonical `v<N>:<arch>` 配對 key、**upsert-by-pair**（重跑取代不重複計數）。
+- `bt-seed.ts`（`npm run bt-seed`）：跑 v3 內部 round-robin，寫出全新量尺。**v3 變動時重跑**。
+- `bt-rank.ts`（`npm run bt-rank -- --target=v4:<arch>`）：跑 target vs v3 池 → upsert → 對整份歷史聯合重擬合 → 印全域 ladder（target 就位）＋逐對手殘差。`--no-write` 乾跑。
+
+```bash
+cd tools/sim-runner
+npm run bt-seed -- --repeats=60 --workers=8           # 一次性建量尺（v3 變動才重跑）
+npm run bt-rank -- --target=v4:hunter --repeats=60    # 把 v4 單一策略放上量尺
+```
+
+> 連通性護欄：BT 只在連通分量內共用尺度。target 打完整 v3 池即自動連通；若只打子集且斷開，`bt-rank` 會報出哪些 agent 孤立、要求補對局。
+> 預設池＝6 個 gate archetype（同 `v3-bench`）；`--include-noise` 可把 noise 當底部錨點加入。

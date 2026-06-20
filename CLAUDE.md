@@ -36,6 +36,8 @@ Monorepo：npm workspaces = `client` + `tools/sim-runner`；Python relay 在 `se
 | `npm run v2-rank -- --map=classic` | v2 內部 1v1 排名，找該圖最強 v2（gate 目標；兩圖皆 aggressor） |
 | `npm run v3-diag` / `npm run v3-trace` | v3 機制診斷（道具差/死亡/擊殺）、逐時農田軌跡 |
 | `npm run matrix-bench` | 8-agent（v1×4 + v2×4）1v1 矩陣（v1 vs v2 歷史） |
+| `npm run bt-seed -- --repeats=60` | 建 **Bradley-Terry 量尺**：v3 內部 round-robin 寫 `bt-history/{classic,pirate}.json`（v3 變動才重跑） |
+| `npm run bt-rank -- --target=v4:<arch>` | 把新版單一策略放上 BT 量尺：vs v3 池 → 聯合重擬合 → 全域 Elo ladder ＋逐對手殘差（詳見 `docs/ai-versions.md` §七） |
 | `npm run version-bench` | 活 bot vs 凍結前一版，4-bot FFA，兩圖，看 ΔWinRate / ΔAvgRank |
 | `npm run replay -- fixtures/<f>.json [--jsonl]` | 跑 replay，逐 tick 印 `tick,hashHex` |
 | `npm run gen-fixtures` / `npm run update-golden` | 重產 fixtures / 故意改 sim 後重 pin `fixtures/golden.json` |
