@@ -32,6 +32,7 @@ import {
 } from '../../../client/src/ai/v2/BotConfig';
 import { STRATEGIES } from '../../../client/src/ai/v2/Strategies';
 import { measureSelfTrapRate } from '../src/selfkill';
+import { yieldToEventLoop } from '../src/async-yield';
 
 const SEED_START = 1;
 const SEED_COUNT = 40;
@@ -135,23 +136,24 @@ function runLiveSelfTrapMatch(
 }
 
 /** botsSelfTrapped / (NUM_BOTS * seedCount) for a strategy tuning. */
-function measureStrategy(
+async function measureStrategy(
   tuning: BotTuning,
   seedStart: number,
   seedCount: number,
-): number {
+): Promise<number> {
   let bots = 0;
   for (let i = 0; i < seedCount; i++) {
     bots += runLiveSelfTrapMatch(seedStart + i, tuning, WINDOW_TICKS);
+    await yieldToEventLoop(); // between independent matches; result-neutral
   }
   return bots / (NUM_BOTS * seedCount);
 }
 
 describe('Live BotController (scoring loop) self-trap rate stays low', () => {
-  it(`aggregate over easy+normal+hard < ${(AGG_CEILING * 100).toFixed(0)}%`, () => {
+  it(`aggregate over easy+normal+hard < ${(AGG_CEILING * 100).toFixed(0)}%`, async () => {
     const rates: Record<Difficulty, number> = { easy: 0, normal: 0, hard: 0 };
     for (const d of ['easy', 'normal', 'hard'] as const) {
-      rates[d] = measureSelfTrapRate(d, SEED_START, SEED_COUNT).botsSelfTrappedRate;
+      rates[d] = (await measureSelfTrapRate(d, SEED_START, SEED_COUNT)).botsSelfTrappedRate;
     }
     const agg = (rates.easy + rates.normal + rates.hard) / 3;
     // Reported for the build log.
@@ -163,18 +165,18 @@ describe('Live BotController (scoring loop) self-trap rate stays low', () => {
     expect(agg).toBeLessThan(AGG_CEILING);
   });
 
-  it(`each of the 4 STRATEGIES keeps < ${(STRATEGY_CEILING * 100).toFixed(0)}% self-trap`, () => {
+  it(`each of the 4 STRATEGIES keeps < ${(STRATEGY_CEILING * 100).toFixed(0)}% self-trap`, async () => {
     for (const s of STRATEGIES) {
-      const rate = measureStrategy(s.tuning, SEED_START, SEED_COUNT);
+      const rate = await measureStrategy(s.tuning, SEED_START, SEED_COUNT);
       console.log(`[live self-trap] strategy ${s.key} = ${rate.toFixed(4)}`);
       expect(rate, `${s.key} self-trap rate`).toBeLessThanOrEqual(STRATEGY_CEILING);
     }
   });
 
-  it('the measurement is deterministic (same seeds → identical)', () => {
+  it('the measurement is deterministic (same seeds → identical)', async () => {
     const tuning = tuningFor('hard');
-    const a = measureStrategy(tuning, SEED_START, 15);
-    const b = measureStrategy(tuning, SEED_START, 15);
+    const a = await measureStrategy(tuning, SEED_START, 15);
+    const b = await measureStrategy(tuning, SEED_START, 15);
     expect(a).toEqual(b);
   });
 });

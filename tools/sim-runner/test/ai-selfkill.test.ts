@@ -21,6 +21,7 @@ import { createInitialState, tick, type SimState } from '../../../client/src/sim
 import { BotController } from '../../../client/src/ai/v2/BotController';
 import { botSeed, tuningFor, type Difficulty } from '../../../client/src/ai/v2/BotConfig';
 import { measureSelfTrapRate } from '../src/selfkill';
+import { yieldToEventLoop } from '../src/async-yield';
 
 const SEED_START = 1;
 const SEED_COUNT = 80;
@@ -38,15 +39,15 @@ const SELF_TRAP_CEILING: Readonly<Record<Difficulty, number>> = {
 
 describe('BotController self-trap rate stays low (regression guard)', () => {
   for (const d of ['easy', 'normal', 'hard'] as const) {
-    it(`${d}: < ${(SELF_TRAP_CEILING[d] * 100).toFixed(0)}% of bots self-trap`, () => {
-      const s = measureSelfTrapRate(d, SEED_START, SEED_COUNT);
+    it(`${d}: < ${(SELF_TRAP_CEILING[d] * 100).toFixed(0)}% of bots self-trap`, async () => {
+      const s = await measureSelfTrapRate(d, SEED_START, SEED_COUNT);
       expect(s.botsSelfTrappedRate).toBeLessThan(SELF_TRAP_CEILING[d]);
     });
   }
 
-  it('the measurement is deterministic (same seeds → identical tally)', () => {
-    const a = measureSelfTrapRate('hard', SEED_START, 20);
-    const b = measureSelfTrapRate('hard', SEED_START, 20);
+  it('the measurement is deterministic (same seeds → identical tally)', async () => {
+    const a = await measureSelfTrapRate('hard', SEED_START, 20);
+    const b = await measureSelfTrapRate('hard', SEED_START, 20);
     expect(a).toEqual(b);
   });
 });
@@ -54,11 +55,12 @@ describe('BotController self-trap rate stays low (regression guard)', () => {
 describe('BotController stays aggressive (not over-conservative)', () => {
   const fp = makeFeelParams();
 
-  it('bombs actively and clears soft bricks across a 2-team sweep', () => {
+  it('bombs actively and clears soft bricks across a 2-team sweep', async () => {
     let bombsPlaced = 0;
     let softCleared = 0;
 
     for (let seed = SEED_START; seed < SEED_START + 30; seed++) {
+      await yieldToEventLoop(); // between independent matches; result-neutral
       let state: SimState = createInitialState(seed, fp, 4, {
         teams: [0, 1, 0, 1],
       });

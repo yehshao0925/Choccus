@@ -28,6 +28,7 @@ import { createInitialState, tick, type SimState } from '../../../client/src/sim
 // Single-version measurement tool: pinned to the latest live AI version (v2).
 import { BotController } from '../../../client/src/ai/v2/BotController';
 import { botSeed, tuningFor, type Difficulty } from '../../../client/src/ai/v2/BotConfig';
+import { yieldToEventLoop } from './async-yield';
 
 export type DeathCause = 'self' | 'foe' | 'other';
 
@@ -282,13 +283,13 @@ export interface SelfTrapStats {
  * up at least once during the window. In solo mode a self-trap with no teammate
  * is a death, so this is the rate the player perceives as "the bot suicided".
  */
-export function measureSelfTrapRate(
+export async function measureSelfTrapRate(
   difficulty: Difficulty,
   seedStart: number,
   seedCount: number,
   numBots = 4,
   windowTicks = FUSE_TICKS * 10,
-): SelfTrapStats {
+): Promise<SelfTrapStats> {
   let selfTraps = 0;
   let foeTraps = 0;
   let otherTraps = 0;
@@ -299,6 +300,7 @@ export function measureSelfTrapRate(
     foeTraps += m.foeTraps;
     otherTraps += m.otherTraps;
     botsSelfTrapped += m.botsSelfTrapped;
+    await yieldToEventLoop(); // between independent matches; result-neutral
   }
   const botMatches = numBots * seedCount;
   const botTicks = botMatches * windowTicks;

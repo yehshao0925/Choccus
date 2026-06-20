@@ -25,6 +25,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { yieldToEventLoop } from '../src/async-yield';
+
 import { FUSE_TICKS, SPARK_TICKS } from '../../../shared/constants';
 import { TileKind } from '../../../shared/types';
 import { makeFeelParams } from '../../../client/src/config/FeelParams';
@@ -135,23 +137,24 @@ function runSelfTrapMatch(
 }
 
 /** botsSelfTrapped / (numBots * seedCount) over a contiguous seed block. */
-function measure(seedStart: number, seedCount: number): number {
+async function measure(seedStart: number, seedCount: number): Promise<number> {
   let botsSelfTrapped = 0;
   for (let i = 0; i < seedCount; i++) {
     botsSelfTrapped += runSelfTrapMatch(seedStart + i, NUM_BOTS, WINDOW_TICKS);
+    await yieldToEventLoop(); // between independent matches; result-neutral
   }
   return botsSelfTrapped / (NUM_BOTS * seedCount);
 }
 
 describe('ChaosV self-trap rate stays low (regression guard)', () => {
-  it(`< ${(THRESHOLD * 100).toFixed(0)}% of ChaosV bots self-trap`, () => {
-    const rate = measure(SEED_START, SEED_COUNT);
+  it(`< ${(THRESHOLD * 100).toFixed(0)}% of ChaosV bots self-trap`, async () => {
+    const rate = await measure(SEED_START, SEED_COUNT);
     expect(rate).toBeLessThan(THRESHOLD);
   });
 
-  it('the measurement is deterministic (same seeds → identical rate)', () => {
-    const a = measure(SEED_START, 20);
-    const b = measure(SEED_START, 20);
+  it('the measurement is deterministic (same seeds → identical rate)', async () => {
+    const a = await measure(SEED_START, 20);
+    const b = await measure(SEED_START, 20);
     expect(a).toEqual(b);
   });
 });
