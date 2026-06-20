@@ -22,9 +22,10 @@
  * map. A single running GLOBAL match counter feeds every seed across both maps
  * so seeds never collide.
  *
- * Draw tiebreak (cap reached with >1 bot alive): the surviving bot that
- * collected the most pickups (fire + cannon + speed) wins; exact ties stay a
- * genuine draw. Mirrors tournament.ts `tiebreakWinner`.
+ * Timeout rule (cap reached with >1 bot alive): the CHALLENGER (new version) is
+ * judged to lose — only an OLD-version survivor can take the tick-cap win (by the
+ * most pickups: fire + cannon + speed). If only new-version bots survive to the
+ * cap it's a genuine draw. A new version must KILL within the time limit to win.
  *
  * Pure orchestration: no Date / Math.random / performance — every seed is
  * derived from the running GLOBAL match counter, so repeated runs are
@@ -32,6 +33,7 @@
  */
 import { GamePhase } from '../../../shared/types';
 import {
+  MATCH_MAX_TICKS,
   PLAYER_START_CANNON,
   PLAYER_START_FIRE,
   PLAYER_START_SPEED_BONUS,
@@ -55,8 +57,8 @@ import {
 const N = 4;
 /** Times the full 24-permutation slate is replayed per map. 24×R matches/map. */
 const R = 4;
-/** Per-match tick cap; a match hitting this without a winner is a draw. */
-const MAX_TICKS = 3600;
+/** Per-match tick cap (3 min @ 60 Hz); the sim itself also forces OVER here. */
+const MAX_TICKS = MATCH_MAX_TICKS;
 /** Base match seed; per-match seed = (BASE + globalMatchIndex) >>> 0. */
 const BASE = 0x12345678;
 /** Map layouts the bench evaluates, each printed as its own table. */
@@ -225,8 +227,16 @@ function runMatch(
     winnerContestant = slotCon[aliveSlots[0]!]!;
     draw = false;
   } else if (aliveSlots.length > 1) {
-    // Hit the tick cap with multiple survivors: break the tie on item progress.
-    const winSlot = tiebreakWinner(state, aliveSlots);
+    // Tick-cap timeout: the CHALLENGER (new version) is judged to lose — a new
+    // version only earns a win by an actual kill, never by out-farming to the
+    // cap. Restrict the item tiebreak to OLD-version survivors; if none survive
+    // (only new-version bots left), it's a genuine draw.
+    const oldSurvivors = aliveSlots.filter(
+      (s) => CONTESTANTS[slotCon[s]!]!.version === OLD_VERSION,
+    );
+    let winSlot: number | null = null;
+    if (oldSurvivors.length === 1) winSlot = oldSurvivors[0]!;
+    else if (oldSurvivors.length > 1) winSlot = tiebreakWinner(state, oldSurvivors);
     if (winSlot !== null) {
       winnerContestant = slotCon[winSlot]!;
       draw = false;
@@ -393,7 +403,8 @@ function printTable(mapKind: MapKind, tally: Tally, rows: Row[]): void {
   console.log(
     `[map: ${mapKind}] version FFA: ${CONTESTANTS.length} contestants × ` +
       `4!=24 slot permutations × R=${R} = ${totalMatches} matches, tick cap ` +
-      `${MAX_TICKS}, ${totalTiebreaks} decided by tiebreak, ${totalDraws} true draws`,
+      `${MAX_TICKS}, ${totalTiebreaks} won on old-version timeout tiebreak ` +
+      `(new version loses on timeout), ${totalDraws} true draws`,
   );
   console.log(fmtRow(headers));
   console.log(sep);

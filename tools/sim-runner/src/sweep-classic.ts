@@ -150,11 +150,11 @@ function runSchedule(agents: Agent[], opts: Options): GameOutcome[] {
   for (const [i, j] of pairs) {
     for (let r = 0; r < opts.repeats; r++) {
       const seed = scenarioSeed(CLASSIC_MAP_INDEX, r);
-      // Forward: i in slot 0, j in slot 1.
-      const fwd = runMatchSeeded(seed, [i!, j!], agents, 'classic', DUEL_N, makeCtrl);
+      // Forward: i in slot 0, j in slot 1. (undefined maxTicks → default cap.)
+      const fwd = runMatchSeeded(seed, [i!, j!], agents, 'classic', DUEL_N, undefined, makeCtrl);
       outcomes.push({ agentA: i!, agentB: j!, winnerAgent: fwd.winnerAgent });
       // Reverse: same seed, seats swapped.
-      const rev = runMatchSeeded(seed, [j!, i!], agents, 'classic', DUEL_N, makeCtrl);
+      const rev = runMatchSeeded(seed, [j!, i!], agents, 'classic', DUEL_N, undefined, makeCtrl);
       outcomes.push({ agentA: j!, agentB: i!, winnerAgent: rev.winnerAgent });
     }
   }

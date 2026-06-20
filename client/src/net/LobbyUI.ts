@@ -470,10 +470,11 @@ export class LobbyUI {
     }
   }
 
-  showResult(victory: boolean, detail: string): void {
+  showResult(result: 'win' | 'loss' | 'draw', detail: string): void {
     this.resultPanel.style.display = 'block';
-    this.resultTitle.textContent = victory ? 'Victory!' : 'Defeat';
-    this.resultTitle.style.color = victory ? PALETTE.accent : PALETTE.soft;
+    this.resultTitle.textContent =
+      result === 'win' ? 'Victory!' : result === 'draw' ? 'Draw' : 'Defeat';
+    this.resultTitle.style.color = result === 'win' ? PALETTE.accent : PALETTE.soft;
     this.resultDetail.textContent = detail;
     this.resultStatus.textContent = '';
   }

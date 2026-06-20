@@ -14,6 +14,7 @@
  */
 import { GamePhase } from '../../../shared/types';
 import {
+  MATCH_MAX_TICKS,
   PLAYER_START_CANNON,
   PLAYER_START_FIRE,
   PLAYER_START_SPEED_BONUS,
@@ -34,8 +35,8 @@ import {
 
 /** FFA player count = the fixed number of spawn corners. */
 export const N = 4;
-/** Per-match tick cap; a match hitting this without a winner is a draw. */
-export const MAX_TICKS = 3600;
+/** Per-match tick cap (3 min @ 60 Hz); the sim itself also forces OVER here. */
+export const MAX_TICKS = MATCH_MAX_TICKS;
 /** Base match seed; per-match seed = (BASE + globalMatchIndex) >>> 0. */
 export const BASE = 0x12345678;
 /** Difficulty is ignored when a strategy archetype is set; kept for the spec. */
@@ -213,6 +214,10 @@ export interface MatchRecord {
   draw: boolean;
   /** True when the winner was decided by the tick-cap item tiebreak. */
   tiebreak: boolean;
+  /** True when the match hit the tick cap with >1 survivor (dragged to timeout,
+   *  as opposed to a clean kill or a same-tick mutual KO). Lets the head-to-head
+   *  benches judge "challenger dragged to the cap → loses" (see v3-bench). */
+  timedOut: boolean;
 }
 
 /**
@@ -232,6 +237,10 @@ export function runMatchSeeded(
   agents: Agent[],
   mapKind: MapKind,
   n: number = N,
+  // Per-match tick cap. Defaults to the real 3-min cap; only the determinism
+  // tests pass a shorter value to keep the bit-identity check fast (determinism
+  // holds at any length). The sim itself also forces OVER at MATCH_MAX_TICKS.
+  maxTicks: number = MAX_TICKS,
   makeCtrl: (agent: Agent, seed: number, slot: number) => IBotController = (
     a,
     s,
@@ -253,7 +262,7 @@ export function runMatchSeeded(
 
   const elimTick: number[] = new Array(n).fill(-1);
 
-  while (state.phase === GamePhase.PLAYING && state.tick < MAX_TICKS) {
+  while (state.phase === GamePhase.PLAYING && state.tick < maxTicks) {
     const frame: InputFrame[] = [];
     for (let s = 0; s < n; s++) frame.push(controllers[s]!.sample(state, s));
     state = tick(state, frame);
@@ -269,6 +278,10 @@ export function runMatchSeeded(
 
   const aliveSlots: number[] = [];
   for (let s = 0; s < n; s++) if (state.players[s]!.alive) aliveSlots.push(s);
+
+  // >1 survivor at the end ⇒ the match was dragged to the tick cap (a clean
+  // finish leaves 1, a mutual KO leaves 0). This is the "timeout" signal.
+  const timedOut = aliveSlots.length > 1;
 
   let winnerAgent: number | null = null;
   let draw = true;
@@ -293,6 +306,7 @@ export function runMatchSeeded(
     winnerAgent,
     draw,
     tiebreak,
+    timedOut,
   };
 }
 

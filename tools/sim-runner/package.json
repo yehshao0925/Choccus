@@ -12,7 +12,12 @@
     "version-bench": "tsx src/version-bench.ts",
     "duel-bench": "tsx src/duel-bench.ts",
     "cross-version-bench": "tsx src/cross-version-bench.ts",
-    "matrix-bench": "tsx src/matrix-bench.ts"
+    "matrix-bench": "tsx src/matrix-bench.ts",
+    "v3-bench": "tsx src/v3-bench.ts",
+    "v3-diag": "tsx src/v3-diag.ts",
+    "v3-trace": "tsx src/v3-trace.ts",
+    "v3-sweep": "tsx src/v3-sweep.ts",
+    "v2-rank": "tsx src/v2-rank.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

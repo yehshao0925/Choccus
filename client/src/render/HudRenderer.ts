@@ -15,8 +15,9 @@
  */
 import { Container, Graphics, Text, type TextStyle } from 'pixi.js';
 import { GamePhase } from '../../../shared/types';
-import { MAP_COLS, TICK_HZ, TILE_PX } from '../../../shared/constants';
+import { MAP_COLS, MATCH_MAX_TICKS, TICK_HZ, TILE_PX } from '../../../shared/constants';
 import type { SimState } from '../sim/Sim';
+import { resolveOutcome } from '../sim/Outcome';
 import { playerColor } from './PlayerRenderer';
 
 export const HUD_HEIGHT_PX = 112;
@@ -158,11 +159,17 @@ export class HudRenderer {
 function bannerText(state: SimState, restartHint: boolean): string {
   if (state.phase === GamePhase.PLAYING) return 'PLAYING — last team standing wins!';
   if (state.phase === GamePhase.OVER) {
-    const aliveTeams = new Set(state.players.filter((p) => p.alive).map((p) => p.team));
     const suffix = restartHint ? ' (R to restart)' : '';
-    return aliveTeams.size >= 1
-      ? `VICTORY — last team standing!${suffix}`
-      : `DRAW — everyone crystallized.${suffix}`;
+    const { winnerTeam } = resolveOutcome(state);
+    if (winnerTeam === null) {
+      // Genuine draw: distinguish a wipe-out from a tick-cap dead heat.
+      return state.players.some((p) => p.alive)
+        ? `DRAW — time up, dead heat.${suffix}`
+        : `DRAW — everyone crystallized.${suffix}`;
+    }
+    return state.tick >= MATCH_MAX_TICKS
+      ? `TIME UP — team ${winnerTeam} wins (survivors / items)!${suffix}`
+      : `VICTORY — last team standing!${suffix}`;
   }
   return 'LOBBY';
 }

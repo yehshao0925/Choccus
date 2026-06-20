@@ -49,6 +49,14 @@ function smallAgents(): Agent[] {
   ];
 }
 const SMALL_REPEATS = 1;
+/**
+ * Short per-match tick cap for the bit-identity / parallel-equality checks.
+ * Determinism holds at ANY match length, so cap matches well below the real
+ * 3-min game cap (MATCH_MAX_TICKS) to keep the heavy worker-threads path inside
+ * vitest's RPC heartbeat — full-length classic duels (no kills) would otherwise
+ * run for minutes and stall the reporter.
+ */
+const SHORT_CAP = 600;
 
 /** Strip a GameResult down to the bytes that matter for an identity check. */
 function digest(results: GameResult[]): unknown {
@@ -65,7 +73,7 @@ function digest(results: GameResult[]): unknown {
 describe('matrix bench — single-thread bit-identity', () => {
   it('two serial runs of the small schedule are byte-identical', async () => {
     const agents = smallAgents();
-    const games = buildGameList(agents, SMALL_REPEATS);
+    const games = buildGameList(agents, SMALL_REPEATS, SHORT_CAP);
     const a = await runAllGames(games, agents, { workers: 1 });
     const b = await runAllGames(games, agents, { workers: 1 });
 
@@ -84,7 +92,7 @@ describe('matrix bench — single-thread bit-identity', () => {
 describe('matrix bench — parallel == serial (CRN red line)', () => {
   it('workers>1 deep-equals workers=1 on the small schedule', async () => {
     const agents = smallAgents();
-    const games = buildGameList(agents, SMALL_REPEATS);
+    const games = buildGameList(agents, SMALL_REPEATS, SHORT_CAP);
     const serial = await runAllGames(games, agents, { workers: 1 });
     // Force the real worker_threads path with more than one shard.
     const parallel = await runAllGames(games, agents, { workers: 4 });
@@ -97,7 +105,7 @@ describe('matrix bench — parallel == serial (CRN red line)', () => {
 describe('matrix bench — CRN seed reuse', () => {
   it('scenarioSeed depends only on (map, repeat), shared across all pairings', () => {
     const agents = smallAgents();
-    const games = buildGameList(agents, SMALL_REPEATS);
+    const games = buildGameList(agents, SMALL_REPEATS, SHORT_CAP);
 
     // Group games by (mapKind, seed) and assert: for a given map, each distinct
     // seed corresponds to exactly one repeat, and ALL pairings that ran under it

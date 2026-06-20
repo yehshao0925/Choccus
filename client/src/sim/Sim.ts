@@ -22,6 +22,7 @@
  * PRNG draw order across a whole tick: step 3 (drop rolls) only.
  * `createInitialState` draws: map generation ONLY (no per-entity spawn draws).
  */
+import { MATCH_MAX_TICKS } from '../../../shared/constants';
 import { GamePhase } from '../../../shared/types';
 import {
   type FeelParams,
@@ -241,14 +242,20 @@ export function tick(state: SimState, inputs: readonly InputFrame[]): SimState {
 
   // (8) win check (always PvP / last-team-standing). The resulting phase IS
   // hashed. OVER once at most one distinct team still has an alive player
-  // (a single survivor wins; everyone gone is also OVER).
+  // (a single survivor wins; everyone gone is also OVER), OR once the hard
+  // match time cap is hit — the surviving teams are then resolved outside the
+  // sim by most-survivors → item tiebreak → draw (see Outcome.ts).
+  const nextTick = state.tick + 1;
   const aliveTeams = new Set<number>();
   for (const p of players) if (p.alive) aliveTeams.add(p.team);
-  const phase = aliveTeams.size <= 1 ? GamePhase.OVER : GamePhase.PLAYING;
+  const phase =
+    aliveTeams.size <= 1 || nextTick >= MATCH_MAX_TICKS
+      ? GamePhase.OVER
+      : GamePhase.PLAYING;
 
   // (9) assemble + hash.
   const next: SimState = {
-    tick: state.tick + 1,
+    tick: nextTick,
     phase,
     prng,
     params: state.params,

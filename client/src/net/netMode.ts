@@ -170,14 +170,15 @@ export async function runNetMode(params: URLSearchParams): Promise<void> {
       renderer,
       keyboard,
       onStatus: (s) => updateMatchStatus(s),
-      onOver: (victory) => {
+      onOver: (result) => {
         screen = 'result';
-        ui.showResult(
-          victory,
-          victory
+        const detail =
+          result === 'win'
             ? 'Your team is the last standing!'
-            : 'Your team was eliminated…',
-        );
+            : result === 'draw'
+              ? "Time up — it's a draw."
+              : 'Your team was eliminated…';
+        ui.showResult(result, detail);
       },
     });
   }

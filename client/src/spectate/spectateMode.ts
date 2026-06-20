@@ -17,24 +17,19 @@
  *   ?lineup=2-chaosv,1-gambler  one VERSION-ARCHETYPE token per slot (2..4)
  *   ?map=classic|pirate         arena layout (default classic)
  *   ?speed=1|2|4|8              sim-speed multiplier (default 4)
- *   ?maxTicks=3600              per-match tick cap (default 3600, min 60)
+ *   ?maxTicks=10800            per-match tick cap (default 10800 = 3 min, min 60)
  *
  * On every match end a running SCOREBOARD (keyed by contestant label) updates,
  * then a fresh match auto-restarts after ~1.5s with a fresh seed.
  */
-import {
-  PLAYER_START_CANNON,
-  PLAYER_START_FIRE,
-  PLAYER_START_SPEED_BONUS,
-  TICK_MS,
-} from '../../../shared/constants';
+import { MATCH_MAX_TICKS, TICK_MS } from '../../../shared/constants';
 import { GamePhase } from '../../../shared/types';
 import { AI_VERSIONS, type BotSpec, type IBotController, LATEST_AI_VERSION } from '../ai';
 import { makeFeelParams } from '../config/FeelParams';
 import { Renderer } from '../render/Renderer';
 import { type InputFrame } from '../sim/InputBuffer';
 import type { MapKind } from '../sim/Map';
-import type { PlayerState } from '../sim/Player';
+import { resolveOutcome } from '../sim/Outcome';
 import { type SimState, createInitialState, tick } from '../sim/Sim';
 
 /**
@@ -48,8 +43,17 @@ const randomSeed = (): number => Math.floor(Math.random() * 0x1_0000_0000) >>> 0
 /** Clamp big frame gaps (tab switch, breakpoint) to avoid a spiral of death. */
 const MAX_FRAME_MS = 250;
 
-/** The four archetype keys, in fixed order (mirrors the benches). */
-const ARCHETYPE_KEYS = ['aggressor', 'turtle', 'gambler', 'chaosv'] as const;
+/**
+ * Archetype keys spectate accepts in `?lineup=`. Covers every key across all AI
+ * versions: v1/v2 use aggressor/turtle/gambler/chaosv; v3 is the 7-archetype
+ * limited-kill roster hunter/farmer/zoner/runner/trapper/reactive/noise. A key a
+ * given version doesn't define falls back to that version's difficulty tuning
+ * (e.g. 2-trapper → v2 normal).
+ */
+const ARCHETYPE_KEYS = [
+  'aggressor', 'turtle', 'gambler', 'chaosv', 'tempering', 'farmer',
+  'hunter', 'zoner', 'runner', 'trapper', 'reactive', 'noise',
+] as const;
 type ArchetypeKey = (typeof ARCHETYPE_KEYS)[number];
 
 /** Display name per archetype key (note ChaosV's mixed case). */
@@ -58,6 +62,14 @@ const ARCHETYPE_LABEL: Readonly<Record<ArchetypeKey, string>> = {
   turtle: 'Turtle',
   gambler: 'Gambler',
   chaosv: 'ChaosV',
+  tempering: 'Tempering',
+  farmer: 'Farmer',
+  hunter: 'Hunter',
+  zoner: 'Zoner',
+  runner: 'Runner',
+  trapper: 'Trapper',
+  reactive: 'Reactive',
+  noise: 'Noise',
 };
 
 /** Allowed sim-speed multipliers. */
@@ -129,51 +141,10 @@ function parseSpeed(raw: string | null): Speed {
   return (SPEEDS as readonly number[]).includes(n) ? (n as Speed) : 4;
 }
 
-/** Tick cap: ?maxTicks= (default 3600, floored at 60). */
+/** Tick cap: ?maxTicks= (default 10800 = 3 min, floored at 60). */
 function parseMaxTicks(raw: string | null): number {
   const n = Number.parseInt((raw ?? '').trim(), 10);
-  return Number.isFinite(n) ? Math.max(60, Math.trunc(n)) : 3600;
-}
-
-/**
- * Item-progress score = number of pickups collected (fire + cannon + speed).
- * Mirrors the bench winner logic (bench-utils.ts itemScore) — replicated here,
- * not imported (sim-runner lives outside the client). Pure integer.
- */
-function itemScore(p: PlayerState): number {
-  return (
-    p.fire -
-    PLAYER_START_FIRE +
-    (p.cannon - PLAYER_START_CANNON) +
-    Math.trunc((p.speedBonusTenths - PLAYER_START_SPEED_BONUS) / 4)
-  );
-}
-
-/**
- * Pick the tiebreak winner among the given alive slots by item score, then fire,
- * then cannon (all desc), with slot index as the final stable key. Returns the
- * slot, or null when the top two tie on all three keys (a genuine draw). Mirrors
- * bench-utils.ts tiebreakWinner.
- */
-function tiebreakWinner(state: SimState, aliveSlots: number[]): number | null {
-  const key = (s: number): [number, number, number] => {
-    const p = state.players[s]!;
-    return [itemScore(p), p.fire, p.cannon];
-  };
-  const sorted = aliveSlots.slice().sort((a, b) => {
-    const ka = key(a);
-    const kb = key(b);
-    for (let i = 0; i < ka.length; i++) {
-      if (ka[i]! !== kb[i]!) return kb[i]! - ka[i]!;
-    }
-    return a - b; // stable, but only reached on a full tie
-  });
-  const top = sorted[0]!;
-  const second = sorted[1]!;
-  const kt = key(top);
-  const ks = key(second);
-  const fullTie = kt.every((v, i) => v === ks[i]!);
-  return fullTie ? null : top;
+  return Number.isFinite(n) ? Math.max(60, Math.trunc(n)) : MATCH_MAX_TICKS;
 }
 
 export async function runSpectate(params: URLSearchParams): Promise<void> {
@@ -352,18 +323,10 @@ export async function runSpectate(params: URLSearchParams): Promise<void> {
 
   /** Tally the finished match into the scoreboard (called once per match). */
   const scoreMatch = (): void => {
-    const aliveSlots: number[] = [];
-    for (let s = 0; s < lineup.length; s++) {
-      if (cur.players[s]!.alive) aliveSlots.push(s);
-    }
-    let winnerSlot: number | null = null;
-    if (cur.phase === GamePhase.OVER && aliveSlots.length === 1) {
-      // Clean last-bot-standing finish.
-      winnerSlot = aliveSlots[0]!;
-    } else if (aliveSlots.length > 1) {
-      // Cap reached with multiple survivors: break the tie on item progress.
-      winnerSlot = tiebreakWinner(cur, aliveSlots);
-    }
+    // Each bot is its own team (FFA), so the shared resolver's winnerSlot is the
+    // winning contestant: clean last-bot-standing, or — at the cap — most
+    // survivors → item tiebreak → draw.
+    const { winnerSlot } = resolveOutcome(cur);
     played += 1;
     if (winnerSlot === null) {
       draws += 1;

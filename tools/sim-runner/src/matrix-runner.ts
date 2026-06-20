@@ -59,6 +59,9 @@ export interface Game {
   slot0Agent: number;
   /** Agent-pool index seated in slot 1. */
   slot1Agent: number;
+  /** Optional per-match tick cap (serialized to workers). Undefined → the real
+   *  3-min default; the determinism tests set a short value for speed. */
+  maxTicks?: number;
 }
 
 /** A finished game: its id plus the raw MatchRecord (all numbers/arrays). */
@@ -76,7 +79,7 @@ export interface GameResult {
  * Order (outer→inner): map, pair, repeat, direction(forward, reverse). Forward =
  * agent i in slot 0; reverse = agent j in slot 0 (cancels spawn-corner bias).
  */
-export function buildGameList(agents: Agent[], repeats: number): Game[] {
+export function buildGameList(agents: Agent[], repeats: number, maxTicks?: number): Game[] {
   const n = agents.length;
   const pairs = combinations(
     Array.from({ length: n }, (_, i) => i),
@@ -91,9 +94,9 @@ export function buildGameList(agents: Agent[], repeats: number): Game[] {
       for (let r = 0; r < repeats; r++) {
         const seed = scenarioSeed(m, r);
         // Forward: i in slot 0, j in slot 1.
-        games.push({ gameId: gameId++, mapKind, seed, slot0Agent: i!, slot1Agent: j! });
+        games.push({ gameId: gameId++, mapKind, seed, slot0Agent: i!, slot1Agent: j!, maxTicks });
         // Reverse: same seed, seats swapped.
-        games.push({ gameId: gameId++, mapKind, seed, slot0Agent: j!, slot1Agent: i! });
+        games.push({ gameId: gameId++, mapKind, seed, slot0Agent: j!, slot1Agent: i!, maxTicks });
       }
     }
   }
@@ -108,6 +111,7 @@ export function runGame(game: Game, agents: Agent[]): GameResult {
     agents,
     game.mapKind,
     DUEL_N,
+    game.maxTicks,
   );
   return { gameId: game.gameId, record };
 }

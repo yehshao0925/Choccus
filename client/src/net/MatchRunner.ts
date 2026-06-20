@@ -21,6 +21,7 @@ import { KeyboardInput } from '../input/KeyboardInput';
 import { sampleLocalInput } from '../input/InputMapper';
 import type { Renderer } from '../render/Renderer';
 import type { SimState } from '../sim/Sim';
+import { resolveOutcome } from '../sim/Outcome';
 import { LockstepEngine, type LockstepStatus } from './LockstepEngine';
 import type { NetClient } from './NetClient';
 import type { MatchStartMsg } from './protocolCodec';
@@ -33,8 +34,8 @@ export interface MatchRunnerOptions {
   renderer: Renderer;
   /** Long-lived; attached to window for the match, detached on stop(). */
   keyboard: KeyboardInput;
-  /** Fired once when the sim reaches OVER. */
-  onOver?: (victory: boolean, finalState: SimState) => void;
+  /** Fired once when the sim reaches OVER (win/loss for your team, or a draw). */
+  onOver?: (result: 'win' | 'loss' | 'draw', finalState: SimState) => void;
   /** Fired every animation frame. */
   onStatus?: (status: LockstepStatus) => void;
 }
@@ -109,12 +110,17 @@ export class MatchRunner {
     this.opts.onStatus?.(this.engine.getStatus());
     if (!this.overFired && next.phase === GamePhase.OVER) {
       this.overFired = true;
-      // PvP: victory = your team still has a survivor.
+      // PvP: resolve the winning team (last team standing, or — at the time cap
+      // — most survivors → item tiebreak → draw), then map it to your team.
       const me = next.players.find((p) => p.slot === this.opts.start.slot);
-      const victory =
-        me !== undefined &&
-        next.players.some((p) => p.alive && p.team === me.team);
-      this.opts.onOver?.(victory, next);
+      const { winnerTeam } = resolveOutcome(next);
+      const result: 'win' | 'loss' | 'draw' =
+        winnerTeam === null
+          ? 'draw'
+          : me !== undefined && winnerTeam === me.team
+            ? 'win'
+            : 'loss';
+      this.opts.onOver?.(result, next);
     }
     this.rafId = requestAnimationFrame(this.frame);
   };

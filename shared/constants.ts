@@ -68,6 +68,18 @@ export const TRAPPED_TICKS = Math.round(5.0 * TICK_HZ); // 300
 export const RESPAWN_PROTECT_TICKS = Math.round(4.0 * TICK_HZ); // 240
 
 // ---------------------------------------------------------------------------
+// Match length
+// ---------------------------------------------------------------------------
+
+/**
+ * Hard match time cap: 3.0 min. The sim forces phase OVER at this tick even if
+ * more than one team is still standing; the surviving teams are then resolved by
+ * "most survivors → item-progress tiebreak → draw" (see sim/Outcome.ts). The
+ * AI-eval benches and spectate use the same cap so every context agrees.
+ */
+export const MATCH_MAX_TICKS = Math.round(180 * TICK_HZ); // 10800
+
+// ---------------------------------------------------------------------------
 // Player initial values & caps
 // ---------------------------------------------------------------------------
 

@@ -22,7 +22,7 @@ import { type InputFrame } from '../../../client/src/sim/InputBuffer';
 import { tick, createInitialState, type SimState } from '../../../client/src/sim/Sim';
 
 const BASE = 0x12345678;
-const MAX_TICKS = 3600;
+const MAX_TICKS = 10800; // 3 min @ 60 Hz (= shared MATCH_MAX_TICKS)
 type MapKind = 'classic' | 'pirate';
 
 // slot 0 = agent A (default v2-aggressor), slot 1 = agent B (default v1-gambler).

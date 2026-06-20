@@ -4,8 +4,8 @@ import type { MapKind } from '../sim/Map';
  *  matrix-bench + docs/ai-versions.md). */
 export const MAP_CHAMPION: Readonly<Record<MapKind, { version: number; archetype: string }>> =
   Object.freeze({
-    classic: { version: 2, archetype: 'chaosv' },
-    pirate:  { version: 2, archetype: 'aggressor' },
+    classic: { version: 3, archetype: 'trapper' },
+    pirate:  { version: 3, archetype: 'trapper' },
   });
 export function championFor(map: MapKind): { version: number; archetype: string } {
   return MAP_CHAMPION[map];

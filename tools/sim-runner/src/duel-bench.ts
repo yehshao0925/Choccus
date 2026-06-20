@@ -60,7 +60,7 @@ const N = 2;
 /** Times the full matrix×seating slate is replayed. */
 const R = 8;
 /** Per-match tick cap; a match hitting this without a winner is a draw. */
-const MAX_TICKS = 3600;
+const MAX_TICKS = 10800; // 3 min @ 60 Hz (= shared MATCH_MAX_TICKS)
 /** Base match seed; per-match seed = (BASE + globalMatchIndex) >>> 0. */
 const BASE = 0x12345678;
 /** Map layouts the bench evaluates, each printed as its own table. */

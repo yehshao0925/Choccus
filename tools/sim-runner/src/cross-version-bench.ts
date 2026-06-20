@@ -59,7 +59,7 @@ const N = 4;
 /** Times each slot permutation is replayed. 24 perms x R=2 = 48 matches per map. */
 const REPEATS = 2;
 /** Per-match tick cap; a match hitting this without a winner is a draw. */
-const MAX_TICKS = 3600;
+const MAX_TICKS = 10800; // 3 min @ 60 Hz (= shared MATCH_MAX_TICKS)
 /** Base match seed; per-match seed = (BASE + globalMatchIndex) >>> 0. */
 const BASE = 0x12345678;
 /** Difficulty is ignored when a strategy archetype is set; kept for the spec. */
