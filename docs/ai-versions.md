@@ -177,6 +177,19 @@ v3 從 v2 原封複製後演進（v2 凍結不動）。**2026-06-20 大改：勝
 
 **非遞移診斷**：v3 是刻意 RPS 環，BT（單一尺度）會壓縮環內差距——這是特性不是 bug。`bt-rank` 另印**逐對手「觀測 vs BT 預測」殘差**，殘差大負＝該策略被某 v3 archetype 剋（單一 Elo 看不到的非遞移訊號）。
 
+**目前量尺**（`bt-seed --repeats=30`，每對 60 場 × 兩 seating、CRN，錨定池均值＝1500）：
+
+| 名次 | classic | Elo | | pirate | Elo |
+| --- | --- | --- | --- | --- | --- |
+| 1 | v3:trapper | 1660 | | v3:zoner | 1762 |
+| 2 | v3:zoner | 1658 | | v3:farmer | 1740 |
+| 3 | v3:farmer | 1649 | | v3:trapper | 1727 |
+| 4 | v3:runner | 1485 | | v3:runner | 1605 |
+| 5 | v3:hunter | 1324 | | v3:hunter | 1272 |
+| 6 | v3:reactive | 1224 | | v3:reactive | 894 |
+
+> 與 sudden-death 後的實測一致：發育／控場（farmer/zoner/trapper）擠在頂端，過度進攻的 hunter/reactive 收圈場上自滅墊底（reactive 在開放 pirate 尤其弱）。量尺存於 `bt-history/{classic,pirate}.json`（committed）。
+
 **程式**（`tools/sim-runner/`）：
 - `bradley-terry.ts`：純 BT 引擎（MM 擬合、錨定、log-likelihood、勝率預測、連通性 union-find 護欄）。
 - `bt-history.ts`：per-map 持久化對戰歷史（`bt-history/{classic,pirate}.json`），canonical `v<N>:<arch>` 配對 key、**upsert-by-pair**（重跑取代不重複計數）。
