@@ -50,8 +50,12 @@ export const PIRATE_PROFILE: MapProfile = Object.freeze({
   // robust). 6 keeps every top matchup healthy. weight 7 also drops trapper
   // (58->55) with no mirror gain — 6 is the confirmed peak (+48 lead).
   shrinkSurvivalWeight: 6,
-  // Mid cannon dev target (shared default) — pirate is byte-unchanged.
-  devTargetCannon: 3,
+  // Mid cannon dev target — RAISED to 4 for v5 (was 3). The anti-entrapment
+  // defense bought a large trapper margin (pirate vs trapper ~57-62%), so the
+  // farming-intensity penalty the v4 analysis saw is now affordable; the diag
+  // showed pirate-mirror losses carry a negative dev-gap, and more cannons = more
+  // seal power to close first in the shrink. Under A/B (pirate-only).
+  devTargetCannon: 4,
   // No corner-finish on pirate: measured neutral-to-negative on the open map
   // (farmer 55->53, mirror/trapper flat) — rarely fires and diving adds risk.
   cornerFinish: false,
