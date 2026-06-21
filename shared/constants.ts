@@ -108,10 +108,14 @@ export const SUDDEN_DEATH_TILE_INTERVAL = 25; // ticks per hardened tile
 export const PLAYER_START_HP = 1;
 /** Starting fire power (cross-flow reach in tiles). */
 export const PLAYER_START_FIRE = 2;
-export const PLAYER_MAX_FIRE = 6;
+/** Max fire power. Balance: raised 6 -> 7 (high-blast build: longer melt-flow
+ * cross to seal/wall larger areas). Re-pins golden + re-seeds the BT yardstick. */
+export const PLAYER_MAX_FIRE = 7;
 /** Starting simultaneous bomb count. */
 export const PLAYER_START_CANNON = 1;
-export const PLAYER_MAX_CANNON = 5;
+/** Max simultaneous bombs. Balance: raised 5 -> 6 (more bombs to build larger
+ * blockades). Re-pins golden + re-seeds the BT yardstick. */
+export const PLAYER_MAX_CANNON = 6;
 /** Speed bonus: starts at 0, +0.4 tiles/s per item, capped at +2.0. */
 export const PLAYER_START_SPEED_BONUS = 0;
 export const SPEED_BONUS_PER_ITEM = 0.4;

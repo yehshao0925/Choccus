@@ -107,10 +107,10 @@ export const CLASSIC_PROFILE: MapProfile = Object.freeze({
   // Converts the Zoner's herding into actual kills against the kill-phase peers
   // (trapper/farmer) that the shrink pull does not reach.
   cornerFinish: true,
-  // GROW A LONGER BLAST (v4-classic): raise the fire dev target to the max (6) so
-  // the bot builds a longer cross — seals/corner-walls cover more exits and reach
-  // fleeing foes. Few pickups, so no over-farming (unlike the cannon target).
-  devTargetFire: 6,
+  // GROW A LONGER BLAST (v4-classic): drive the fire dev target to the (new) max
+  // 7 so the bot builds the longest cross — seals/corner-walls cover more exits
+  // and reach fleeing foes. Few pickups, so no over-farming (unlike cannon).
+  devTargetFire: 7,
   // Early-economy boost left at the default (100/2x). Raising it to 200 was
   // measured net-negative: it lifts the mirror (zoner 58->63%) but CRASHES the
   // binding aggressive matchup (trapper 55->47%) — more farming intensity over-

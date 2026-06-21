@@ -79,7 +79,12 @@ export interface GameResult {
  * Order (outer→inner): map, pair, repeat, direction(forward, reverse). Forward =
  * agent i in slot 0; reverse = agent j in slot 0 (cancels spawn-corner bias).
  */
-export function buildGameList(agents: Agent[], repeats: number, maxTicks?: number): Game[] {
+export function buildGameList(
+  agents: Agent[],
+  repeats: number,
+  maxTicks?: number,
+  maps: readonly MapKind[] = MAPS,
+): Game[] {
   const n = agents.length;
   const pairs = combinations(
     Array.from({ length: n }, (_, i) => i),
@@ -88,8 +93,11 @@ export function buildGameList(agents: Agent[], repeats: number, maxTicks?: numbe
 
   const games: Game[] = [];
   let gameId = 0;
+  // Iterate the GLOBAL map index m so scenarioSeed(m, r) is identical whether or
+  // not a map is filtered out — CRN stays byte-stable vs a full run.
   for (let m = 0; m < MAPS.length; m++) {
     const mapKind = MAPS[m]!;
+    if (!maps.includes(mapKind)) continue;
     for (const [i, j] of pairs) {
       for (let r = 0; r < repeats; r++) {
         const seed = scenarioSeed(m, r);

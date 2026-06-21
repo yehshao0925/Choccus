@@ -13,7 +13,7 @@
  * so the file always reflects the current v3 code.
  */
 
-import { BASE, MAPS } from './bench-utils';
+import { BASE, MAPS, type MapKind } from './bench-utils';
 import { buildGameList } from './matrix-runner';
 import { agentIds, toTally } from './bt-history';
 import { fitBradleyTerry } from './bradley-terry';
@@ -31,22 +31,30 @@ async function main(): Promise<void> {
   const repeats = Number(arg(argv, 'repeats', '150'));
   const workers = Number(arg(argv, 'workers', '8'));
   const includeNoise = argv.includes('--include-noise');
+  // --map re-seeds only the given map(s) (default: all). Only the selected maps'
+  // history files are written, so the others are left intact (NOT overwritten
+  // with empty data). CRN preserved (seeds key off the global map index).
+  const mapArg = arg(argv, 'map', '');
+  const selMaps = mapArg
+    ? (mapArg.split(',').map((s) => s.trim()) as MapKind[]).filter((m) => MAPS.includes(m))
+    : MAPS;
 
   const agents = v3PoolAgents(includeNoise);
   console.log(
     `Seeding BT history: v3 pool [${agents.map(idOf).join(', ')}]\n` +
-      `  ${repeats} repeats × 2 seatings × ${MAPS.length} maps, workers=${workers}`,
+      `  ${repeats} repeats × 2 seatings × ${selMaps.length} map(s) [${selMaps.join(', ')}], workers=${workers}`,
   );
 
-  const games = buildGameList(agents, repeats);
+  const games = buildGameList(agents, repeats, undefined, selMaps);
   console.log(`  scheduling ${games.length} duels…`);
   const t0 = Date.now();
   const byMap = await runAndTally(games, agents, workers);
   console.log(`  done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
-  // Write fresh histories (v3-only), then show the resulting per-map ladder.
+  // Write fresh histories (v3-only) for the SELECTED maps only, then show their
+  // per-map ladder. Unselected maps' committed history files are left untouched.
   const histories = mergeIntoHistories(byMap, agents, { repeats, seedBase: BASE }, true);
-  for (const map of MAPS) {
+  for (const map of selMaps) {
     const history = histories.get(map)!;
     saveHistory(history);
     const ids = agentIds(history);
