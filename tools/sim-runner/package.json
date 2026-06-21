@@ -17,7 +17,9 @@
     "v3-diag": "tsx src/v3-diag.ts",
     "v3-trace": "tsx src/v3-trace.ts",
     "v3-sweep": "tsx src/v3-sweep.ts",
-    "v2-rank": "tsx src/v2-rank.ts"
+    "v2-rank": "tsx src/v2-rank.ts",
+    "bt-seed": "tsx src/bt-seed.ts",
+    "bt-rank": "tsx src/bt-rank.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

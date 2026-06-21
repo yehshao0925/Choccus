@@ -188,17 +188,20 @@ function runWithWorkers(
   workers: number,
 ): Promise<GameResult[]> {
   const shards = shard(games, workers);
-  // The worker file is a sibling .ts; tsx's --import loader (passed via execArgv)
-  // lets the worker import the same TypeScript sim/AI the main thread does.
-  const workerUrl = new URL('./matrix-worker.ts', import.meta.url);
-  const workerPath = fileURLToPath(workerUrl);
+  // The worker runs TypeScript (matrix-worker.ts + the sim/AI it pulls in), so
+  // the worker thread needs tsx's ESM hooks. Passing `execArgv: ['--import',
+  // 'tsx']` is the documented way, but on this tsx/node combo those hooks don't
+  // resolve nested extensionless `.ts` specifiers inside a worker. So we point
+  // the Worker at a plain-JS bootstrap node runs natively, which registers tsx's
+  // loader programmatically and then dynamically imports the real .ts worker —
+  // that path DOES resolve the project's extensionless imports.
+  const bootUrl = new URL('./matrix-worker-boot.mjs', import.meta.url);
+  const bootPath = fileURLToPath(bootUrl);
 
   const runShard = (shardGames: Game[]): Promise<GameResult[]> =>
     new Promise<GameResult[]>((resolve, reject) => {
-      const worker = new Worker(workerPath, {
+      const worker = new Worker(bootPath, {
         workerData: { games: shardGames, agents },
-        // Re-apply tsx so the worker can load .ts; mirror the parent's loader.
-        execArgv: ['--import', 'tsx'],
       });
       let settled = false;
       // Capture the shard's results on the message, but only settle on `exit`
