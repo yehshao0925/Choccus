@@ -410,8 +410,10 @@ const SHRINK_SURVIVAL_RANK: Int32Array = (() => {
 /** Ticks BEFORE the shrink starts that the survival pull begins ramping in. */
 const SHRINK_LEAD_TICKS = 1800; // ~30 s — drift to center from ~90 s onward.
 /** Foe free-space at/below which CORNER-FINISH considers the foe cornered (dive
- * in to seal rather than orbit at the ring). */
-const CORNER_FREE_THRESHOLD = 3;
+ * in to seal rather than orbit at the ring). Only active when cornerFinish is on
+ * (classic), so tuning it is classic-only. Wider with a long blast: diving to
+ * seal a semi-cornered foe is lethal once the cross is long. */
+const CORNER_FREE_THRESHOLD = 5;
 
 /** A scored candidate action. */
 interface Candidate {
