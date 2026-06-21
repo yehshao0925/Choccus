@@ -14,6 +14,7 @@ import type { IBotController } from './common/IBotController';
 import { v1Module } from './v1/module';
 import { v2Module } from './v2/module';
 import { v3Module } from './v3/module';
+import { v4Module } from './v4/module';
 
 /**
  * Caller-supplied bot configuration, version-agnostic. `strategyRaw` is the raw
@@ -40,6 +41,7 @@ export const AI_VERSIONS: Readonly<Record<number, AiVersionModule>> = Object.fre
   [v1Module.version]: v1Module,
   [v2Module.version]: v2Module,
   [v3Module.version]: v3Module,
+  [v4Module.version]: v4Module,
 });
 
 /** The newest registered AI version (the default for live play and tools). */
@@ -53,4 +55,4 @@ export type { IBotController } from './common/IBotController';
  * Re-export the latest version's difficulty parser so callers can normalize a
  * ?difficulty= value (for HUD text) without importing a version folder.
  */
-export { parseDifficulty } from './v3/BotConfig';
+export { parseDifficulty } from './v4/BotConfig';
