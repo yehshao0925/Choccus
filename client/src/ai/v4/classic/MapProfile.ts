@@ -98,10 +98,11 @@ export const CLASSIC_PROFILE: MapProfile = Object.freeze({
   // NEGATIVE (vs v3:farmer 48%->44% — farming to a full surplus loses the dev race
   // and over-exposes the bot). The cannon surplus alone does NOT produce a corner
   // trap; the existing 2-3 bomb pincer caps out regardless. A true 5-6 bomb corner
-  // Cannon surplus measured net-negative even WITH the long blast (cannon 4 ->
-  // 1674 vs 1701 at cannon 3): the extra farming over-exposes the bot regardless
-  // of blast reach. Mid default 3 is best.
-  devTargetCannon: 3,
+  // RE-TEST at new caps (cannon max 6, fire 7): develop toward a 5-cannon surplus
+  // so the bot can build a maximum-range multi-bomb blockade (direction 2). The
+  // surplus hurt at the OLD caps/short blast; re-validating now that the blast is
+  // long and the cap is higher. Under bench.
+  devTargetCannon: 5,
   // CORNER-FINISH (v4-classic): when a foe is cornered (free space collapsed),
   // dive in (ring->1) to seal it with the multi-bomb pincer instead of orbiting.
   // Converts the Zoner's herding into actual kills against the kill-phase peers
