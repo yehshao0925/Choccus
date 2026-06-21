@@ -411,9 +411,9 @@ const SHRINK_SURVIVAL_RANK: Int32Array = (() => {
 const SHRINK_LEAD_TICKS = 1800; // ~30 s — drift to center from ~90 s onward.
 /** Foe free-space at/below which CORNER-FINISH considers the foe cornered (dive
  * in to seal rather than orbit at the ring). Only active when cornerFinish is on
- * (classic), so tuning it is classic-only. Wider with a long blast: diving to
- * seal a semi-cornered foe is lethal once the cross is long. */
-const CORNER_FREE_THRESHOLD = 5;
+ * (classic). Measured: 3 is best — widening to 5 (dive on semi-cornered foes)
+ * over-exposes the bot since the foe is not actually trapped (1670 vs 1701). */
+const CORNER_FREE_THRESHOLD = 3;
 
 /** A scored candidate action. */
 interface Candidate {
