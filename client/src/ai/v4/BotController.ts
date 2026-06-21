@@ -432,6 +432,12 @@ export class BotController {
   private lastTile = -1;
   private ticksSinceTileChange = 0;
 
+  /** Effective Zoner stand-off ring radius for THIS decision: the per-map
+   * `MapProfile.zoneStandoffTiles` override when set (>0), else the archetype's
+   * own `tuning.zoneStandoff`. Resolved once per decision tick (profile in scope)
+   * and read by leafReward (which has no profile param). 0 = not a Zoner. */
+  private curZoneStandoff = 0;
+
   /** 反應流 Reactive: nearest-foe tile + foe bomb count seen LAST decision, so we
    * can derive the foe's last action (move direction / fresh bomb) to mirror. */
   private lastFoeTile = -1;
@@ -1709,11 +1715,13 @@ export class BotController {
       if (this.tuning.fleeFoe) {
         // 逃跑流 Runner: always maximize distance from the foe (strong, unfaded).
         retreatScaled = W_RETREAT * Math.min(man, RETREAT_CAP);
-      } else if (this.tuning.zoneStandoff !== undefined && this.tuning.zoneStandoff > 0) {
+      } else if (this.curZoneStandoff > 0) {
         // 控場流 Zoner: hold a stand-off RING — reward tiles whose foe-distance is
         // nearest the ring radius (compress from there; never dive, never flee).
+        // Radius is the per-map effective stand-off (classic tightens it to close
+        // into kill range instead of mirroring at arm's length).
         huntScaled =
-          W_HUNT * Math.max(0, HUNT_CAP - Math.abs(man - this.tuning.zoneStandoff));
+          W_HUNT * Math.max(0, HUNT_CAP - Math.abs(man - this.curZoneStandoff));
       } else {
         if (protectLead) {
           retreatScaled = Math.floor(
@@ -2138,6 +2146,13 @@ export class BotController {
     // kit at full economy), then ramps linearly to 100 at the tick cap. Fades the
     // farming terms, scales up the hunt pull, and loosens the close-quarters
     // survivability CLAMP (never the refuge gate) so a compressing bomb can win.
+    // Resolve the effective Zoner ring radius for this decision: per-map override
+    // when set (>0), else the archetype's own knob. Read by leafReward below.
+    this.curZoneStandoff =
+      profile.zoneStandoffTiles > 0
+        ? profile.zoneStandoffTiles
+        : (this.tuning.zoneStandoff ?? 0);
+
     const huntStart = profile.huntStartTick;
     const urgency =
       state.tick <= huntStart

@@ -149,4 +149,14 @@ export interface MapProfile {
    * otherwise mirror to a sudden-death coin-flip instead of a clean kill.
    */
   readonly huntStartTick: number;
+  /**
+   * Per-map override for the 控場流 Zoner stand-off ring radius (tiles). The Zoner
+   * rewards tiles whose Manhattan distance to the foe is nearest this radius, so a
+   * SMALLER radius pulls it to compress into kill range rather than orbit at arm's
+   * length. 0 = no override (use the archetype's own `tuning.zoneStandoff`).
+   * Pirate leaves it 0 (the open map's wider ring already wins); classic tightens
+   * it because orbiting a near-peer on the cramped lattice just mirrors to a
+   * sudden-death coin-flip — closing the ring is how the Zoner actually kills.
+   */
+  readonly zoneStandoffTiles: number;
 }

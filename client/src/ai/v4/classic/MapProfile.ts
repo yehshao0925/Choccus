@@ -83,4 +83,9 @@ export const CLASSIC_PROFILE: MapProfile = Object.freeze({
   // earlier, so a foe-compressing / sealing bomb can land the kill in the midgame
   // rather than waiting for the shrink. Sweeping this is the v4-classic lever.
   huntStartTick: 1200,
+  // TIGHTEN THE ZONER RING (v4-classic): radius 2 (vs the archetype's 4) so the
+  // bot compresses into kill range on the cramped lattice instead of orbiting a
+  // near-peer at arm's length (which mirrors to a sudden-death coin-flip). This is
+  // the zoner-specific kill lever; sweep alongside huntStartTick.
+  zoneStandoffTiles: 2,
 });

@@ -38,4 +38,6 @@ export const PIRATE_PROFILE: MapProfile = Object.freeze({
   multiBombFarm: true,
   // Kill phase engages at the global default (≈40 s) — neutral, pirate is untouched.
   huntStartTick: 2400,
+  // No ring override — pirate's Zoner keeps its own wider stand-off (tuning value).
+  zoneStandoffTiles: 0,
 });
