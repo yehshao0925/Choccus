@@ -46,8 +46,10 @@ export const PIRATE_PROFILE: MapProfile = Object.freeze({
   devTargetCannon: 3,
   // No corner-finish ring collapse on pirate (open map, untouched).
   cornerFinish: false,
-  // Mid fire dev target (shared default) — pirate byte-unchanged.
-  devTargetFire: 4,
+  // GROW A LONGER BLAST (v4-pirate): port the classic winner — drive the fire dev
+  // target to the new max 7 so the bot builds the longest cross (stronger kills /
+  // seals on the open map too). Few pickups → no over-farming. Under bench.
+  devTargetFire: 7,
   // Default early-economy boost (2x) — pirate byte-unchanged.
   devEconBoostMax: 100,
   // Default seal weight — pirate byte-unchanged.
