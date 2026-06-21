@@ -409,6 +409,9 @@ const SHRINK_SURVIVAL_RANK: Int32Array = (() => {
 })();
 /** Ticks BEFORE the shrink starts that the survival pull begins ramping in. */
 const SHRINK_LEAD_TICKS = 1800; // ~30 s — drift to center from ~90 s onward.
+/** Foe free-space at/below which CORNER-FINISH considers the foe cornered (dive
+ * in to seal rather than orbit at the ring). */
+const CORNER_FREE_THRESHOLD = 3;
 
 /** A scored candidate action. */
 interface Candidate {
@@ -467,6 +470,11 @@ export class BotController {
    * `MapProfile.devTargetCannon`); read by developmentFactor. Classic raises it
    * to the max so the bot accumulates a multi-bomb surplus for corner seals. */
   private curDevTargetCannon = DEV_TARGET_CANNON;
+
+  /** Whether CORNER-FINISH is active for THIS decision (per-map
+   * `MapProfile.cornerFinish`): when the nearest foe is cornered (free space
+   * collapsed) the Zoner ring collapses so the bot dives in to seal it. */
+  private curCornerFinish = false;
 
   /** 反應流 Reactive: nearest-foe tile + foe bomb count seen LAST decision, so we
    * can derive the foe's last action (move direction / fresh bomb) to mirror. */
@@ -2214,6 +2222,7 @@ export class BotController {
         : (this.tuning.zoneStandoff ?? 0);
     this.curShrinkWeight = profile.shrinkSurvivalWeight;
     this.curDevTargetCannon = profile.devTargetCannon;
+    this.curCornerFinish = profile.cornerFinish;
 
     const huntStart = profile.huntStartTick;
     const urgency =
@@ -2245,6 +2254,24 @@ export class BotController {
       if (foeHit !== null) {
         foeDist = Math.min(40, foeHit.dist);
         nearestFoeTileIdx = idx(foeHit.target[0], foeHit.target[1]);
+      }
+    }
+
+    // CORNER-FINISH (v4-classic): if the nearest foe is in reach AND genuinely
+    // cornered (its free space has collapsed to <= CORNER_FREE_THRESHOLD), drop
+    // the Zoner stand-off ring to 1 so the bot dives in to SEAL it with the
+    // multi-bomb pincer instead of orbiting at arm's length while the foe slips
+    // out. The hard refuge gate still governs our own safety. Classic-only.
+    if (
+      this.curCornerFinish &&
+      this.curZoneStandoff > 1 &&
+      nearestFoeTileIdx >= 0 &&
+      foeDist <= (this.tuning.combatRangeTiles ?? 5)
+    ) {
+      const ffx = nearestFoeTileIdx % MAP_COLS;
+      const ffy = (nearestFoeTileIdx - ffx) / MAP_COLS;
+      if (this.foeFreeSpace(state, danger, ffx, ffy, null) <= CORNER_FREE_THRESHOLD) {
+        this.curZoneStandoff = 1;
       }
     }
 

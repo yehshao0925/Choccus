@@ -44,4 +44,6 @@ export const PIRATE_PROFILE: MapProfile = Object.freeze({
   shrinkSurvivalWeight: 0,
   // Mid cannon dev target (shared default) — pirate is byte-unchanged.
   devTargetCannon: 3,
+  // No corner-finish ring collapse on pirate (open map, untouched).
+  cornerFinish: false,
 });

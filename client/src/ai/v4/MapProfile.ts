@@ -181,4 +181,14 @@ export interface MapProfile {
    * to a real surplus and can box a cornered foe; pirate keeps the mid default.
    */
   readonly devTargetCannon: number;
+  /**
+   * CORNER-FINISH (v4-classic). When true, the moment the nearest attackable foe
+   * is in reach AND its free space has collapsed (cornered / dead-ended), the
+   * 控場流 Zoner stand-off ring collapses to 1 so the bot dives in to SEAL the
+   * cornered foe with the offensive multi-bomb pincer rather than orbiting at the
+   * ring while the foe escapes — turning "herd toward a corner" into an actual
+   * kill. The hard refuge gate is unchanged (the bot still needs an escape).
+   * false = the ring radius is never overridden by foe mobility.
+   */
+  readonly cornerFinish: boolean;
 }

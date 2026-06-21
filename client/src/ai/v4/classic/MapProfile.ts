@@ -99,4 +99,9 @@ export const CLASSIC_PROFILE: MapProfile = Object.freeze({
   // trap; the existing 2-3 bomb pincer caps out regardless. A true 5-6 bomb corner
   // seal needs a dedicated planner, not just more cannons. Seam kept for that work.
   devTargetCannon: 3,
+  // CORNER-FINISH (v4-classic): when a foe is cornered (free space collapsed),
+  // dive in (ring->1) to seal it with the multi-bomb pincer instead of orbiting.
+  // Converts the Zoner's herding into actual kills against the kill-phase peers
+  // (trapper/farmer) that the shrink pull does not reach.
+  cornerFinish: true,
 });
