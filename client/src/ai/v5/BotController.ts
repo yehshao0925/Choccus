@@ -1640,6 +1640,15 @@ export class BotController {
     fire: number,
     ticksPerTile: number,
     foeReachTiles: number,
+    // v5: when true, do NOT stop at the first (nearest) valid refuge — scan ALL
+    // valid refuges within maxEscapeLen and return the one with the MOST escape
+    // branches (tie → nearest, then BFS order). The cheap boolean gate keeps the
+    // default (false) fast path = first valid refuge, byte-identical to v4. The
+    // EMIT / multi-bomb COMMIT paths pass true so the bot RUNS to a refuge that is
+    // not itself a dead-end — fixing the "flee a bomb straight into a single-exit
+    // pocket and get sealed by a follow-up" failure the diagnostic isolated. Only
+    // the once-per-bomb commit pays the per-candidate escapeBranches cost.
+    preferRobust = false,
   ): readonly [number, number] | null {
     const hyp = hypotheticalBomb(myX, myY, fire, slot);
     const enemyHyps = this.nearestEnemyHyps(
@@ -1663,6 +1672,9 @@ export class BotController {
     const prevDist = new Map<number, number>([[startIdx, 0]]);
     const queue: number[] = [startIdx];
     let cursor = 0;
+    let best: readonly [number, number] | null = null;
+    let bestBranches = -1;
+    let bestDist = Number.MAX_SAFE_INTEGER;
     while (cursor < queue.length) {
       const cur = queue[cursor];
       cursor += 1;
@@ -1677,7 +1689,14 @@ export class BotController {
           !dangerPessimistic.lethalBetween(cur, arrival, horizonEnd + 1) &&
           this.escapeFitsInFuse(hyp.fuseTicks, dist, ticksPerTile)
         ) {
-          return [cx, cy];
+          if (!preferRobust) return [cx, cy];
+          // Collect-and-rank: most escape branches wins, nearest breaks the tie.
+          const br = this.escapeBranches(state, dangerPessimistic, cx, cy);
+          if (br > bestBranches || (br === bestBranches && dist < bestDist)) {
+            best = [cx, cy];
+            bestBranches = br;
+            bestDist = dist;
+          }
         }
       }
 
@@ -1693,7 +1712,7 @@ export class BotController {
         queue.push(nIdx);
       }
     }
-    return null;
+    return best;
   }
 
   /**
@@ -2005,6 +2024,7 @@ export class BotController {
       myPlayer.fire,
       ticksPerTile,
       foeReachTiles,
+      true, // commit to the MOST escapable refuge, not just the nearest.
     );
   }
 
@@ -2063,6 +2083,7 @@ export class BotController {
       myPlayer.fire,
       ticksPerTile,
       foeReachTiles,
+      true, // commit to the MOST escapable refuge, not just the nearest.
     );
   }
 
@@ -2998,6 +3019,7 @@ export class BotController {
               myPlayer.fire,
               tpt,
               foeReachTiles,
+              true, // commit to the MOST escapable refuge, not just the nearest.
             )
           : null;
         if (
