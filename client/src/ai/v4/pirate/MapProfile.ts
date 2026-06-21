@@ -38,8 +38,10 @@ export const PIRATE_PROFILE: MapProfile = Object.freeze({
   multiBombFarm: true,
   // Kill phase engages at the global default (≈40 s) — neutral, pirate is untouched.
   huntStartTick: 2400,
-  // No ring override — pirate's Zoner keeps its own wider stand-off (tuning value).
-  zoneStandoffTiles: 0,
+  // TIGHTEN THE RING (v4-pirate): override the archetype's wide default (4) to 3
+  // for more kill pressure on the mirror — ported from the classic kill lever.
+  // Open map, so only a modest tighten (3, not classic's 2). Under bench.
+  zoneStandoffTiles: 3,
   // SUDDEN-DEATH SURVIVAL (v4-pirate): the main mirror-breaker here (zoner 50->58
   // at weight 4). Push to 6 — the open-map mirror responded strongly, so a
   // stronger center pre-position extends the lead. Measured sweet spot: 6.
