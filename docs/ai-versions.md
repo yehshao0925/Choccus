@@ -1,7 +1,7 @@
 # AI 版本狀態（Choccus Bot）
 
 > 最後更新：2026-06-21（**v4 上線並兩圖各自調參完成 + 遊戲重平衡 caps**。詳見 §八。
-> 重點：①遊戲 caps 提高（火力上限 6→**7**、彈數上限 5→**6**），golden 全綠、**兩圖 BT 量尺已用新 caps 重 seed**；②v4 主幹＝**控場流/Zoner**，評估改以 **Bradley-Terry 量尺**為準；③新增三個機制（**長射程發育 fire-7**、**sudden-death 縮圈生存走位 shrinkSurvival**、**角落封殺 cornerFinish**）；④結果 **classic #1 +42、pirate #1 +48**（皆對第二名）；⑤天花板＝**trapper 是 v4 同流派的「封鎖鏡像」**，所有「更兇/更發育/更早交戰」槓桿都會把 trapper 讓掉，故領先卡在這。⑥工具：`bt-rank`/`bt-seed` 新增 `--map` 過濾，單圖評估快 ~5×。）
+> 重點：①遊戲 caps 提高（火力上限 6→**7**、彈數上限 5→**6**），golden 全綠、**兩圖 BT 量尺已用新 caps 重 seed**；②v4 主幹＝**控場流/Zoner**，評估改以 **Bradley-Terry 量尺**為準；③新增三個機制（**長射程發育 fire-7**、**sudden-death 縮圈生存走位 shrinkSurvival**、**角落封殺 cornerFinish**）；④結果 **classic #1 +42、pirate #1 +48**（皆對第二名）；⑤天花板＝**trapper 是 v4 同流派的「封鎖鏡像」**，所有「更兇/更發育/更早交戰」槓桿都會把 trapper 讓掉，故領先卡在這。⑥工具：`bt-rank`/`bt-seed` 新增 `--map` 過濾，單圖評估快 ~5×。⑦新增 **`v5-probe`** 新策略快速 A/B 探針（vs 前沿封鎖者 `v4:zoner`＋`v3:trapper` 直接 CRN、不寫 history、印 SHIP-GATE）；移除 4 個 v2 期過時 throwaway 評估腳本（`probe-classic`/`probe-map`/`sweep-classic`/`v3-sweep`，詳見 §七末）。）
 > 最後更新前一版：2026-06-20（**新增 sudden-death 縮圈機制**（`sim/SuddenDeath.ts`）——120 秒起由外往內螺旋收硬磚、踩到即淘汰，~179 秒收滿全場，徹底消滅 farm-to-timeout。超時率兩圖 89%→**0%**，限時擊殺率 classic 10.8%→**69.2%** / pirate 2.5%→**81.7%**，KILL-EDGE 兩圖仍 PASS。）
 > 評估工具：`tools/sim-runner/` — **v4 起以 `bt-rank`（Bradley-Terry 量尺、含 `--map` 單圖過濾）為權威**；歷史：`v3-bench`（KILL-EDGE）、`kill-probe`、`v2-rank`、`v3-diag`/`v3-trace`、`matrix-bench`、`version-bench`。
 
@@ -138,6 +138,9 @@ npm run v3-bench -- --workers=8 --repeats=150            # 兩圖、定版高樣
 npm run v3-bench -- --map=classic --v2=aggressor --workers=8 --repeats=80  # 快速單圖調參迴圈
 npx tsx src/kill-probe.ts --v3=trapper --v2=aggressor --map=classic  # 獵殺機制診斷（壓縮量/接觸時間/擊殺/死亡）
 npx tsx src/v2-rank.ts -- --map=classic                  # 找該圖最強 v2（gate 目標）
+# BT 量尺（v4／v5 開發）
+npm run bt-rank -- --target=v4:zoner --map=classic       # 放上 v3 量尺 → Elo ladder ＋逐對手殘差
+npm run v5-probe -- --target=v5:<arch>                   # 新策略快速 A/B：vs 前沿封鎖者（v4:zoner＋v3:trapper）直接 CRN，不寫 history
 # 歷史工具
 npm run matrix-bench      # 8 agent 1v1 矩陣（v1 vs v2 歷史）
 npm run version-bench     # 4-bot FFA，活 bot vs 前一版
@@ -208,15 +211,21 @@ v3 從 v2 原封複製後演進（v2 凍結不動）。**2026-06-20 大改：勝
 - `bt-history.ts`：per-map 持久化對戰歷史（`bt-history/{classic,pirate}.json`），canonical `v<N>:<arch>` 配對 key、**upsert-by-pair**（重跑取代不重複計數）。
 - `bt-seed.ts`（`npm run bt-seed`）：跑 v3 內部 round-robin，寫出全新量尺。**v3 變動時重跑**。
 - `bt-rank.ts`（`npm run bt-rank -- --target=v4:<arch>`）：跑 target vs v3 池 → upsert → 對整份歷史聯合重擬合 → 印全域 ladder（target 就位）＋逐對手殘差。`--no-write` 乾跑。
+- `v5-probe.ts`（`npm run v5-probe -- --target=v5:<arch>`）：**新策略快速 A/B 探針**——跑 target vs **前沿封鎖者**（預設 `v4:zoner`＋`v3:trapper`，`--opponents` 可指定任意 `v<N>:<arch>` 混版本對手）直接 CRN 對打，印逐對手勝率、對 live 冠軍（最高版本對手）的 **SHIP-GATE 判定**，外加可 diff 的 SUMMARY 行。**不擬 BT、不寫 history**，是純開發迴圈工具：改前/改後各跑一次比勝率位移。預設 `--repeats=40`，`--map` 過濾。
 
 ```bash
 cd tools/sim-runner
 npm run bt-seed -- --repeats=60 --workers=8           # 一次性建量尺（v3 變動才重跑）
 npm run bt-rank -- --target=v4:hunter --repeats=60    # 把 v4 單一策略放上量尺
+npm run v5-probe -- --target=v5:disruptor --map=classic  # 開發 v5 時的秒級 A/B（vs 前沿封鎖者）
 ```
 
 > 連通性護欄：BT 只在連通分量內共用尺度。target 打完整 v3 池即自動連通；若只打子集且斷開，`bt-rank` 會報出哪些 agent 孤立、要求補對局。
 > 預設池＝6 個 gate archetype（同 `v3-bench`）；`--include-noise` 可把 noise 當底部錨點加入。
+
+**為什麼 v5 開發要用 `v5-probe` 而非只看 `bt-rank` Elo**：`bt-rank` 把 target 對 v3 池打完後，它對 **v4:zoner** 的關係是透過共同 v3 對手**遞移推斷**的；而 v3 roster 是刻意非遞移（RPS），對一個**全新家族**，這個遞移邊正是最不可信的數字——v5 可能對 v3 池 Elo 很高卻**直接輸給現役 v4**。故 v5 的**真正出貨判準 = 對 `v4:zoner` 兩圖直接 CRN 勝率 ≥ 50%**（`v5-probe` 的 SHIP-GATE），BT Elo 只當「落在 ladder 哪一格」的次要讀數。早期 design 還不知 binding 對手是誰時，預設同時打 `v4:zoner`（live 冠軍）＋`v3:trapper`（最強封鎖鏡像、v4 的歷史天花板），看哪個 binding 再收窄。**v5 落版時建議把 `v4:zoner` 也 `bt-seed` 進池**，讓 v6 對著真正前沿（而非只有 v3）量。
+
+**已移除的過時評估工具**（2026-06-21，皆 v2 期一次性 throwaway、未 wire／未被 import／文件無引用）：`probe-classic.ts`（診斷 v2 在 classic 凍結——§四已解決）、`probe-map.ts`（傾印出生角 tile，一次性 debug）、`sweep-classic.ts`（v2 classic MapProfile 注入掃描，標記 DO NOT SHIP）、`v3-sweep.ts`（v3 旋鈕掃描——v3 已凍結為量尺，掃其旋鈕無意義）。
 > **`--map=<classic|pirate>`（2026-06-21 新增）**：只跑/只寫該圖（另一張圖的 history 不動）。調單圖時（另一張 profile 中性）省掉另一張的對局，classic-only 快 ~5×（pirate 對局較慢）。CRN 與全跑逐位元一致（seed 用全域 map index）。`buildChallengerGames`/`buildGameList` 都吃這個 maps 過濾。
 
 ## 八、v4（最新 / live，`AI_VERSION = 4`）— 兩圖各自調參 + 遊戲重平衡

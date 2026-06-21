@@ -38,6 +38,7 @@ Monorepo：npm workspaces = `client` + `tools/sim-runner`；Python relay 在 `se
 | `npm run matrix-bench` | 8-agent（v1×4 + v2×4）1v1 矩陣（v1 vs v2 歷史） |
 | `npm run bt-seed -- --repeats=60` | 建 **Bradley-Terry 量尺**：v3 內部 round-robin 寫 `bt-history/{classic,pirate}.json`（v3 變動才重跑） |
 | `npm run bt-rank -- --target=v4:<arch>` | 把新版單一策略放上 BT 量尺：vs v3 池 → 聯合重擬合 → 全域 Elo ladder ＋逐對手殘差（詳見 `docs/ai-versions.md` §七） |
+| `npm run v5-probe -- --target=v5:<arch>` | **新策略快速 A/B 探針**（不寫 history、不擬 BT）：target vs **前沿封鎖者**（預設 `v4:zoner`＋`v3:trapper`，可 `--opponents=v<N>:<arch>,...` 混版本）直接 CRN 對打，印逐對手勝率＋對 live 冠軍的 SHIP-GATE 判定。改前/改後各跑一次比勝率位移；`--map` 過濾、`--repeats=40` 預設。理由＝新家族對 v4 的關係 BT 只能遞移推斷、最不可信，必須直接量（詳見 `docs/ai-versions.md` §七） |
 | `npm run version-bench` | 活 bot vs 凍結前一版，4-bot FFA，兩圖，看 ΔWinRate / ΔAvgRank |
 | `npm run replay -- fixtures/<f>.json [--jsonl]` | 跑 replay，逐 tick 印 `tick,hashHex` |
 | `npm run gen-fixtures` / `npm run update-golden` | 重產 fixtures / 故意改 sim 後重 pin `fixtures/golden.json` |
@@ -180,3 +181,4 @@ Monorepo：`client/`（TS + Vite + Pixi.js v8 前端）、`tools/sim-runner/`（
 - **v3**（凍結＝**BT 量尺 roster**，`AI_VERSION = 3`，`client/src/ai/v3/`）＝由 v2 演進：**連通性教條**＋修掉「道具 Manhattan 磁鐵」bug、道具優先 cannon/speed、近距才完整保命、多彈叢集農田、保住領先撤退。7-archetype 刻意非遞移 roster，現作為 v4/v5 的固定 Bradley-Terry 量尺（`bt-history/{classic,pirate}.json`）。詳見 `docs/ai-versions.md`。
 - **v4**（**最新 / live**，`AI_VERSION = 4`，`client/src/ai/v4/`）＝由 v3 收斂成**單一主幹策略 Zoner**，評估改以 **Bradley-Terry 量尺**為準。兩圖各一套 `MapProfile`（同 archetype、依 `mapKind` 派發兩組旋鈕）。三個有效機制：**長射程發育 `devTargetFire`=7**（最大槓桿）、**sudden-death 縮圈生存走位 `shrinkSurvivalWeight`**（破鏡像主槓桿，classic 4 / pirate 6）、**角落封殺 `cornerFinish`**（classic on）。配合遊戲 caps 提高（fire 7 / cannon 6）。**結果 classic #1 +42、pirate #1 +48**（皆對第二名）。**天花板＝v3:trapper 是 v4 同流派的「封鎖鏡像」**，所有「更兇/更發育/更早交戰」槓桿都把 trapper 讓掉，只有 fire 射程＋縮圈走位正交有效（已拉滿）。詳見 `docs/ai-versions.md` §八。
 - **不做逐 tick golden hash 鎖 AI**：回歸保障由 `determinism.test.ts`（決定性）＋ **`bt-rank`（BT 量尺就位）**＋機制診斷負責。改完活的 AI（v4）後在 `tools/sim-runner/` 跑 `npm run bt-rank -- --target=v4:zoner --map=<圖>`（調哪張圖跑哪張）＋ `npm test` ＋ `npm run lint`。caps 若再動須重 `bt-seed` 兩圖。
+- **開發新策略（v5＋）的快速迴圈**：用 `npm run v5-probe`（前沿封鎖者直接 CRN A/B，秒級訊號），鎖定 binding 對手（live 冠軍 `v4:zoner`＋鏡像 `v3:trapper`）反覆 A/B；方向定了再 `bt-rank` 上量尺、`npm test`、`npm run lint`。**出貨判準＝對 `v4:zoner` 兩圖直接勝率 ≥ 50%**（光是 v3-池 Elo 高不算數，可能輸給現役 bot）。v5 落版時建議把 `v4:zoner` 也 `bt-seed` 進池，讓 v6 對著真正前沿量。
