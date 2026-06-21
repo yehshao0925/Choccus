@@ -81,11 +81,11 @@ export const CLASSIC_PROFILE: MapProfile = Object.freeze({
   // fast and the top archetypes otherwise mirror into a sudden-death coin-flip;
   // lifting urgency off 0 sooner loosens the close-quarters survivability clamp
   // earlier, so a foe-compressing / sealing bomb can land the kill in the midgame
-  // rather than waiting for the shrink. Sweeping this is the v4-classic lever.
-  // Direction 1 (enter combat sooner): probe 600 — urgency lifts even earlier so
-  // farming fades / the kill clamp loosens sooner, engaging trapper before it can
-  // out-tempo us. Under bench.
-  huntStartTick: 600,
+  // rather than waiting for the shrink. Measured sweet spot: 1200. Earlier (600)
+  // crashes trapper (54->45%) — engaging the aggressor before we have a kit loses;
+  // later over-farms. Trapper punishes BOTH premature combat and over-farming, so
+  // 1200 is the balance.
+  huntStartTick: 1200,
   // TIGHTEN THE ZONER RING (v4-classic): radius 2 (vs the archetype's 4) so the
   // bot compresses into kill range on the cramped lattice instead of orbiting a
   // near-peer at arm's length (which mirrors to a sudden-death coin-flip). This is
