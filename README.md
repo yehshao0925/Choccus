@@ -92,6 +92,26 @@ This starts two services:
 Open `http://<server-ip>:8080/` in two browser tabs, click **Quick Match** (or
 enter the same room name in both tabs), and the online match starts.
 
+### Container (Docker / Podman)
+
+The `Dockerfile` is multi-stage: Node builds `client/dist`, then a Python
+runtime runs `serve.py` (static `:8080` + WS relay `:8765` in one process).
+
+```sh
+podman build -t choccus .          # or: docker build -t choccus .
+podman run -d -p 8080:8080 -p 8765:8765 choccus
+```
+
+Pushing to `main` builds and publishes the image to GitHub Container Registry
+via `.github/workflows/build-image.yml`:
+
+```sh
+podman pull ghcr.io/codingman/choccus:latest
+```
+
+(The package starts private — pull with a PAT, or set it public once in the
+repo's **Packages** settings.)
+
 ### How the WS URL is resolved (client)
 
 The client resolves the relay URL automatically — no hardcoded `localhost`:
