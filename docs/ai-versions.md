@@ -1,6 +1,8 @@
 # AI 版本狀態（Choccus Bot）
 
-> 最後更新：2026-06-21（**v4 上線並兩圖各自調參完成 + 遊戲重平衡 caps**。詳見 §八。
+> 最後更新：2026-06-21（**v5 上線＝v4 Zoner 主幹 ＋ 全新正交「防守軸：逃生路線冗餘」**。詳見 §九。
+> 重點：①v4 的天花板（v3:trapper 封鎖鏡像）與玩家實測死法是同一件事——**躲死胡同／站位不安全→被補一顆封殺彈打死**；先前「只有進攻槓桿、全被 trapper 讓掉」的結論只試過進攻面，**防守面（逃生冗餘）正交未試**。②v5 兩機制：**反封殺位置罰分 `entrapWeight`**（罰逃生分支<2 的死胡同格、按敵接近度加權）＋**穩健逃生點 `robustRefuge`**（放彈後逃向分支最多的格；classic 開、pirate 關）。③結果：**BT 量尺兩圖 #1（v4 退第二）**、直接對 v4 兩圖 ≥ 勝（classic 55.6%）、對 v3:trapper ~54%→~59%。④新工具 **`v5-diag`**（失敗軌跡診斷：死亡分類＋死前 10 秒軌跡）。
+> 最後更新前一版：2026-06-21（**v4 上線並兩圖各自調參完成 + 遊戲重平衡 caps**。詳見 §八。
 > 重點：①遊戲 caps 提高（火力上限 6→**7**、彈數上限 5→**6**），golden 全綠、**兩圖 BT 量尺已用新 caps 重 seed**；②v4 主幹＝**控場流/Zoner**，評估改以 **Bradley-Terry 量尺**為準；③新增三個機制（**長射程發育 fire-7**、**sudden-death 縮圈生存走位 shrinkSurvival**、**角落封殺 cornerFinish**）；④結果 **classic #1 +42、pirate #1 +48**（皆對第二名）；⑤天花板＝**trapper 是 v4 同流派的「封鎖鏡像」**，所有「更兇/更發育/更早交戰」槓桿都會把 trapper 讓掉，故領先卡在這。⑥工具：`bt-rank`/`bt-seed` 新增 `--map` 過濾，單圖評估快 ~5×。⑦新增 **`v5-probe`** 新策略快速 A/B 探針（vs 前沿封鎖者 `v4:zoner`＋`v3:trapper` 直接 CRN、不寫 history、印 SHIP-GATE）；移除 4 個 v2 期過時 throwaway 評估腳本（`probe-classic`/`probe-map`/`sweep-classic`/`v3-sweep`，詳見 §七末）。）
 > 最後更新前一版：2026-06-20（**新增 sudden-death 縮圈機制**（`sim/SuddenDeath.ts`）——120 秒起由外往內螺旋收硬磚、踩到即淘汰，~179 秒收滿全場，徹底消滅 farm-to-timeout。超時率兩圖 89%→**0%**，限時擊殺率 classic 10.8%→**69.2%** / pirate 2.5%→**81.7%**，KILL-EDGE 兩圖仍 PASS。）
 > 評估工具：`tools/sim-runner/` — **v4 起以 `bt-rank`（Bradley-Terry 量尺、含 `--map` 單圖過濾）為權威**；歷史：`v3-bench`（KILL-EDGE）、`kill-probe`、`v2-rank`、`v3-diag`/`v3-trace`、`matrix-bench`、`version-bench`。
@@ -47,7 +49,8 @@ sudden-death 後實測（`v3-bench --workers=8 --repeats=30`，每格 60 場、C
 | **v1** | 凍結（baseline） | 單層加權評分迴圈，**貪婪 1-ply**（只評當下 6 個候選） | `client/src/ai/v1/` |
 | **v2** | 凍結 | v1 的評分項 + **depth-4 forward-search maximin**（3 個悲觀場景）；**核心引擎與地圖策略解耦** | `client/src/ai/v2/`（`core/` + `classic/` + `pirate/`） |
 | **v3** | 凍結（BT 量尺 roster） | v2 引擎 + **連通性教條**（孤立時農到完成、連通後交戰）＋修掉 v2 農田凍結（道具 Manhattan 磁鐵 bug）＋多彈叢集農田＋保住領先撤退 | `client/src/ai/v3/`（`core/` + `classic/` + `pirate/`） |
-| **v4** | **最新 / live**（`AI_VERSION = 4`，兩圖已調參定案） | 由 v3 收斂成**單一主幹**＝**控場流/Zoner**，兩圖各自一套 `MapProfile`：classic 疊 fire-7 + shrinkSurvival + cornerFinish + ring2 + huntStart1200（**#1, +42**）；pirate 疊 fire-7 + shrinkSurvival(6)（**#1, +48**）。配合遊戲 caps 提高（fire 7 / cannon 6） | `client/src/ai/v4/`（`core/` + `classic/` + `pirate/`） |
+| **v4** | 凍結（`AI_VERSION = 4`） | 由 v3 收斂成**單一主幹**＝**控場流/Zoner**，兩圖各自一套 `MapProfile`：classic 疊 fire-7 + shrinkSurvival + cornerFinish + ring2 + huntStart1200（**#1, +42**）；pirate 疊 fire-7 + shrinkSurvival(6)（**#1, +48**）。配合遊戲 caps 提高（fire 7 / cannon 6） | `client/src/ai/v4/`（`core/` + `classic/` + `pirate/`） |
+| **v5** | **最新 / live**（`AI_VERSION = 5`） | v4 Zoner 主幹 ＋ 全新正交**防守軸：逃生路線冗餘**——反封殺位置罰分 `entrapWeight`（罰逃生分支<2 的死胡同格）＋ 穩健逃生點 `robustRefuge`（放彈後逃向分支最多的格；classic 開、pirate 關）。**BT 兩圖 #1（v4 退第二）**、直接對 v4 兩圖 ≥ 勝 | `client/src/ai/v5/`（`core/` + `classic/` + `pirate/`） |
 
 - 兩版各自是獨立、可並存的決策碼快照；版本本身就是持久化機制（無另存的 frozen baseline）。
 - **v2 地圖分軌（2026-06-19）**：v2 的決策引擎抽進 `client/src/ai/v2/core/`（`forwardSearch` / `scenarios` / `commitment`，map-agnostic），每張地圖的策略旋鈕收斂成一個 `MapProfile`（`client/src/ai/v2/{classic,pirate}/MapProfile.ts`，介面在 `v2/MapProfile.ts`）。`BotController` 依 `SimState.mapKind`（新增的非 hash 比賽常數）在第一次 `sample()` 選定 profile 並快取。**仍是同一個 `AI_VERSION = 2`、同一份註冊表**——classic/pirate 只是同版內依地圖派發的兩組策略，不是兩個版本。目前兩 profile 數值相同（== committed v2，純結構重構，行為與 matrix-bench 逐字未變）；之後各圖各自調 profile 即可，不互相影響。

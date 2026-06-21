@@ -39,6 +39,7 @@ Monorepo：npm workspaces = `client` + `tools/sim-runner`；Python relay 在 `se
 | `npm run bt-seed -- --repeats=60` | 建 **Bradley-Terry 量尺**：v3 內部 round-robin 寫 `bt-history/{classic,pirate}.json`（v3 變動才重跑） |
 | `npm run bt-rank -- --target=v4:<arch>` | 把新版單一策略放上 BT 量尺：vs v3 池 → 聯合重擬合 → 全域 Elo ladder ＋逐對手殘差（詳見 `docs/ai-versions.md` §七） |
 | `npm run v5-probe -- --target=v5:<arch>` | **新策略快速 A/B 探針**（不寫 history、不擬 BT）：target vs **前沿封鎖者**（預設 `v4:zoner`＋`v3:trapper`，可 `--opponents=v<N>:<arch>,...` 混版本）直接 CRN 對打，印逐對手勝率＋對 live 冠軍的 SHIP-GATE 判定。改前/改後各跑一次比勝率位移；`--map` 過濾、`--repeats=40` 預設。理由＝新家族對 v4 的關係 BT 只能遞移推斷、最不可信，必須直接量（詳見 `docs/ai-versions.md` §七） |
+| `npm run v5-diag -- --target=v5:zoner [--opponent=v3:trapper]` | **失敗軌跡診斷**：跑 target vs 對手，逐 tick 追 target 的逃生分支數 / 對手距離 / 自由空間 / 發育差；死亡時分類（SEALED 死胡同／OPEN 時機／TRAPPED 糖殼）並印死亡當下 / 1 秒前 / 10 秒前的軌跡——「輸掉的原因十秒前就有跡象」。純分析、不寫 history |
 | `npm run version-bench` | 活 bot vs 凍結前一版，4-bot FFA，兩圖，看 ΔWinRate / ΔAvgRank |
 | `npm run replay -- fixtures/<f>.json [--jsonl]` | 跑 replay，逐 tick 印 `tick,hashHex` |
 | `npm run gen-fixtures` / `npm run update-golden` | 重產 fixtures / 故意改 sim 後重 pin `fixtures/golden.json` |
@@ -57,7 +58,7 @@ Monorepo：`client/`（TS + Vite + Pixi.js v8 前端）、`tools/sim-runner/`（
 
 **Server relay（`server/`）**：`main.py`＝dev relay（純 ws）、`serve.py`＝production（HTTP static + ws）。`relay/`：`RelayServer` / `TickCoordinator`（收齊輸入才放行該 tick；斷線 slot 補 neutral ghost）/ `Lobby` / `Room`。wire = 1-byte `MsgType` + MessagePack（id 定義在 `shared/protocol.ts`，Python 端手動鏡像）。relay **只中繼輸入、不跑 sim**。
 
-**AI 版本制（`client/src/ai/`）**：每個 `ai/vN/` 是獨立、可並存的決策碼快照——**版本本身就是持久化機制，無另存 frozen baseline**（`baselines/` 已移除）。一律透過 `ai/index.ts` 的 version-agnostic factory 取用，呼叫端（`main.ts`、sim-runner）**絕不**直接 import 某 version 資料夾。每圖預設 bot ＝該圖最強 archetype（`ai/mapChampions.ts`）；2026-06-21 起兩圖皆 **v4:zoner**（BT 量尺下兩圖都 #1）。完整版本狀態 / 強度 / 評估流程見 **`docs/ai-versions.md`**。
+**AI 版本制（`client/src/ai/`）**：每個 `ai/vN/` 是獨立、可並存的決策碼快照——**版本本身就是持久化機制，無另存 frozen baseline**（`baselines/` 已移除）。一律透過 `ai/index.ts` 的 version-agnostic factory 取用，呼叫端（`main.ts`、sim-runner）**絕不**直接 import 某 version 資料夾。每圖預設 bot ＝該圖最強 archetype（`ai/mapChampions.ts`）；2026-06-21 起兩圖皆 **v5:zoner**（BT 量尺下兩圖都 #1、且兩圖直接對 v4:zoner 皆 ≥ 勝）。完整版本狀態 / 強度 / 評估流程見 **`docs/ai-versions.md`**。
 
 ## 一、核心玩法
 
@@ -179,6 +180,7 @@ Monorepo：`client/`（TS + Vite + Pixi.js v8 前端）、`tools/sim-runner/`（
 - **v1**（凍結 baseline，`client/src/ai/v1/`）＝貪婪 1-ply 單層加權評分（不前瞻）。
 - **v2**（凍結，`AI_VERSION = 2`，`client/src/ai/v2/`）＝在 v1 評分上加 **depth-4 forward-search maximin**（3 個悲觀場景）。引擎在 `v2/core/`＋每圖 `MapProfile`，`BotController` 依 `SimState.mapKind` 派發。
 - **v3**（凍結＝**BT 量尺 roster**，`AI_VERSION = 3`，`client/src/ai/v3/`）＝由 v2 演進：**連通性教條**＋修掉「道具 Manhattan 磁鐵」bug、道具優先 cannon/speed、近距才完整保命、多彈叢集農田、保住領先撤退。7-archetype 刻意非遞移 roster，現作為 v4/v5 的固定 Bradley-Terry 量尺（`bt-history/{classic,pirate}.json`）。詳見 `docs/ai-versions.md`。
-- **v4**（**最新 / live**，`AI_VERSION = 4`，`client/src/ai/v4/`）＝由 v3 收斂成**單一主幹策略 Zoner**，評估改以 **Bradley-Terry 量尺**為準。兩圖各一套 `MapProfile`（同 archetype、依 `mapKind` 派發兩組旋鈕）。三個有效機制：**長射程發育 `devTargetFire`=7**（最大槓桿）、**sudden-death 縮圈生存走位 `shrinkSurvivalWeight`**（破鏡像主槓桿，classic 4 / pirate 6）、**角落封殺 `cornerFinish`**（classic on）。配合遊戲 caps 提高（fire 7 / cannon 6）。**結果 classic #1 +42、pirate #1 +48**（皆對第二名）。**天花板＝v3:trapper 是 v4 同流派的「封鎖鏡像」**，所有「更兇/更發育/更早交戰」槓桿都把 trapper 讓掉，只有 fire 射程＋縮圈走位正交有效（已拉滿）。詳見 `docs/ai-versions.md` §八。
-- **不做逐 tick golden hash 鎖 AI**：回歸保障由 `determinism.test.ts`（決定性）＋ **`bt-rank`（BT 量尺就位）**＋機制診斷負責。改完活的 AI（v4）後在 `tools/sim-runner/` 跑 `npm run bt-rank -- --target=v4:zoner --map=<圖>`（調哪張圖跑哪張）＋ `npm test` ＋ `npm run lint`。caps 若再動須重 `bt-seed` 兩圖。
+- **v4**（凍結，`AI_VERSION = 4`，`client/src/ai/v4/`）＝由 v3 收斂成**單一主幹策略 Zoner**，評估改以 **Bradley-Terry 量尺**為準。兩圖各一套 `MapProfile`（同 archetype、依 `mapKind` 派發兩組旋鈕）。三個有效機制：**長射程發育 `devTargetFire`=7**、**sudden-death 縮圈生存走位 `shrinkSurvivalWeight`**、**角落封殺 `cornerFinish`**（classic on）。配合遊戲 caps 提高（fire 7 / cannon 6）。**結果 classic #1 +42、pirate #1 +48**。v4 當時的天花板＝v3:trapper 是同流派「封鎖鏡像」——但那是只試過「進攻槓桿」的結論；v5 用**防守槓桿**突破。詳見 `docs/ai-versions.md` §八。
+- **v5**（**最新 / live**，`AI_VERSION = 5`，`client/src/ai/v5/`）＝v4 Zoner 主幹 ＋ 一條全新且正交的**防守軸：逃生路線冗餘**。v4 的天花板（v3:trapper）與玩家實測死法是同一件事——**躲進死胡同／站位不安全 → 被補一顆封殺彈打死**。v5 加兩個機制：①**反封殺位置罰分 `entrapWeight`**（敵在交戰距內時，罰逃生分支 <2 的死胡同格，按接近度加權）；②**穩健逃生點選擇 `robustRefuge`**（放彈後逃向分支最多的格、非最近的死胡同格；classic 開、pirate 關——開放圖追遠逃生點會掉農田 tempo）。結果：**BT 量尺兩圖 #1（v4 退第二）**，且直接對打 v4 兩圖 ≥ 勝（classic 55.6%）、對 v3:trapper 由 ~54% 升到 ~59%。診斷靠 `v5-diag`。詳見 `docs/ai-versions.md` §九。
+- **不做逐 tick golden hash 鎖 AI**：回歸保障由 `determinism.test.ts`（決定性）＋ **`bt-rank`（BT 量尺就位）**＋機制診斷負責。改完活的 AI（v5）後在 `tools/sim-runner/` 跑 `npm run bt-rank -- --target=v5:zoner --map=<圖>`（調哪張圖跑哪張）＋ `npm test` ＋ `npm run lint`。caps 若再動須重 `bt-seed` 兩圖。
 - **開發新策略（v5＋）的快速迴圈**：用 `npm run v5-probe`（前沿封鎖者直接 CRN A/B，秒級訊號），鎖定 binding 對手（live 冠軍 `v4:zoner`＋鏡像 `v3:trapper`）反覆 A/B；方向定了再 `bt-rank` 上量尺、`npm test`、`npm run lint`。**出貨判準＝對 `v4:zoner` 兩圖直接勝率 ≥ 50%**（光是 v3-池 Elo 高不算數，可能輸給現役 bot）。v5 落版時建議把 `v4:zoner` 也 `bt-seed` 進池，讓 v6 對著真正前沿量。
