@@ -20,7 +20,8 @@
     "bt-seed": "tsx src/bt-seed.ts",
     "bt-rank": "tsx src/bt-rank.ts",
     "v5-probe": "tsx src/v5-probe.ts",
-    "v5-diag": "tsx src/v5-diag.ts"
+    "v5-diag": "tsx src/v5-diag.ts",
+    "v5-trace": "tsx src/v5-trace.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

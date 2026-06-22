@@ -73,4 +73,10 @@ export const PIRATE_PROFILE: MapProfile = Object.freeze({
   // coupled to a farming-tempo loss vs the v3 dev-racers (pirate BT 1809->1766);
   // pirate wins the ladder via the entrap term alone (BT #1, +22 over v4).
   robustRefuge: false,
+  // v5 CORRIDOR-AWARE BOMB GATE: OFF on pirate. Tested true (v5-trace shows pirate
+  // also self-seals in the shrink pocket): it LIFTS trapper 59.4->62.5 and farmer,
+  // but DROPS the v4 mirror 50.6->47.5 (fails the ship gate) — on the open symmetric
+  // mirror it only vetoes the bot's own useful bombs and can't touch the real death
+  // (the shrink wall, not a foe seal). So pirate keeps false; classic-only win.
+  corridorGate: false,
 });

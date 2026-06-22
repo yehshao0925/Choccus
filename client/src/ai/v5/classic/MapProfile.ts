@@ -136,4 +136,8 @@ export const CLASSIC_PROFILE: MapProfile = Object.freeze({
   // v5 ROBUST REFUGE: flee a bomb to a junction, not the nearest dead-end. Pure
   // win on the closed classic map (BT +49->+62 over v4, mirror 52.5%->55.6%).
   robustRefuge: true,
+  // v5 CORRIDOR-AWARE BOMB GATE: refuse a bomb whose only escape is a single-exit
+  // corridor while a foe is near (the trapper vChain-seal death the v5-trace showed).
+  // classic on.
+  corridorGate: true,
 });

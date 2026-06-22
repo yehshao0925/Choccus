@@ -247,4 +247,21 @@ export interface MapProfile {
    * via the entrap term alone (BT #1, +22). false = nearest refuge (v4 behaviour).
    */
   readonly robustRefuge: boolean;
+  /**
+   * v5 CORRIDOR-AWARE BOMB GATE (per map). When true, a PLACE_BOMB is only allowed
+   * if — while an attackable foe is within combat range — its validated refuge has
+   * at least ENTRAP_BRANCH_TARGET (2) independent escape branches, i.e. it is a
+   * JUNCTION, not a single-exit corridor. Rationale (v5-trace, classic): the bot's
+   * deaths are the trapper's 1-wide-corridor vChain seal — the foe herds it into a
+   * vertical corridor, caps one end with follow-up bombs, and the bot's own retreat
+   * bombs cap the other. The existing pessimistic gate models the foe bombing from
+   * its CURRENT tile (and only with a free cannon), so it misses the foe ADVANCING
+   * along the escape corridor to cap it (and mid-vChain the foe has no free cannon).
+   * This gate refuses to commit a bomb whose only escape is a cappable corridor when
+   * a foe is near — foe proximity is Manhattan (cannon-INDEPENDENT, since the seal
+   * threat is the imminent follow-up, not a free cannon right now). CLASSIC on (the
+   * closed map is corridors and dies TRAPPED); PIRATE off (it dies to the shrink
+   * wall, not a foe seal, so this would only veto useful bombs). false = v4 gate.
+   */
+  readonly corridorGate: boolean;
 }

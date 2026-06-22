@@ -521,6 +521,12 @@ export class BotController {
    * escapable one, not just the nearest. classic on, pirate off. */
   private curRobustRefuge = false;
 
+  /** Effective v5 CORRIDOR-GATE flag for THIS decision (per-map
+   * `MapProfile.corridorGate`); when true a bomb is vetoed if — with a foe in
+   * combat range — its only refuge is a single-exit corridor (escapeBranches < 2)
+   * a follow-up seal can cap. classic on, pirate off. */
+  private curCorridorGate = false;
+
   /** 反應流 Reactive: nearest-foe tile + foe bomb count seen LAST decision, so we
    * can derive the foe's last action (move direction / fresh bomb) to mirror. */
   private lastFoeTile = -1;
@@ -1680,6 +1686,22 @@ export class BotController {
     let best: readonly [number, number] | null = null;
     let bestBranches = -1;
     let bestDist = Number.MAX_SAFE_INTEGER;
+    // CORRIDOR GATE (classic): is an attackable foe within combat reach? Manhattan,
+    // cannon-INDEPENDENT — the seal threat is the imminent follow-up bomb, and
+    // mid-vChain the foe has no free cannon (so nearestEnemyHyps would miss it).
+    let corridorGateActive = false;
+    if (this.curCorridorGate) {
+      for (const p of state.players) {
+        if (p.slot === slot || p.team === myTeam || !p.alive || p.trapped) continue;
+        if (
+          Math.abs(tileOf(p.posX) - myX) + Math.abs(tileOf(p.posY) - myY) <=
+          foeReachTiles
+        ) {
+          corridorGateActive = true;
+          break;
+        }
+      }
+    }
     while (cursor < queue.length) {
       const cur = queue[cursor];
       cursor += 1;
@@ -1694,21 +1716,34 @@ export class BotController {
           !dangerPessimistic.lethalBetween(cur, arrival, horizonEnd + 1) &&
           this.escapeFitsInFuse(hyp.fuseTicks, dist, ticksPerTile)
         ) {
-          if (!preferRobust) return [cx, cy];
-          // Robust selection: most escape branches wins, nearest breaks the tie.
-          // Enabled PER-MAP (classic only). On the CLOSED classic map this is a
-          // pure win (BT +49->+62 over v4, direct mirror 52.5%->55.6%): escaping a
-          // bomb to a junction instead of the nearest dead-end stops the follow-up
-          // seal. On the OPEN pirate map it is OFF: chasing a far high-branch refuge
-          // there bleeds farming tempo vs the v3 dev-racers (pirate BT 1809->1766)
-          // and tempo-bounding it instead collapsed the mirror (45%) — the open-map
-          // mirror edge and the v3-pool dev race are coupled, so pirate keeps the
-          // nearest-refuge fast path and wins the ladder via the entrap term alone.
-          const br = this.escapeBranches(state, dangerPessimistic, cx, cy);
-          if (br > bestBranches || (br === bestBranches && dist < bestDist)) {
-            best = [cx, cy];
-            bestBranches = br;
-            bestDist = dist;
+          // escapeBranches is needed by the corridor gate AND robust selection;
+          // compute it once when either applies (else keep the v4 fast path).
+          const br =
+            corridorGateActive || preferRobust
+              ? this.escapeBranches(state, dangerPessimistic, cx, cy)
+              : -1;
+          // CORRIDOR GATE: with a foe near, a single-exit corridor refuge can be
+          // capped by a follow-up seal bomb (the trapper vChain death v5-trace
+          // showed) — reject it; require a junction (>= ENTRAP_BRANCH_TARGET).
+          if (corridorGateActive && br < ENTRAP_BRANCH_TARGET) {
+            // skip this refuge — keep searching for a junction within maxEscapeLen.
+          } else if (!preferRobust) {
+            return [cx, cy];
+          } else {
+            // Robust selection: most escape branches wins, nearest breaks the tie.
+            // Enabled PER-MAP (classic only). On the CLOSED classic map this is a
+            // pure win (BT +49->+62 over v4, direct mirror 52.5%->55.6%): escaping a
+            // bomb to a junction instead of the nearest dead-end stops the follow-up
+            // seal. On the OPEN pirate map it is OFF: chasing a far high-branch refuge
+            // there bleeds farming tempo vs the v3 dev-racers (pirate BT 1809->1766)
+            // and tempo-bounding it collapsed the mirror (45%) — the open-map mirror
+            // edge and the v3-pool dev race are coupled, so pirate keeps the
+            // nearest-refuge fast path and wins the ladder via the entrap term alone.
+            if (br > bestBranches || (br === bestBranches && dist < bestDist)) {
+              best = [cx, cy];
+              bestBranches = br;
+              bestDist = dist;
+            }
           }
         }
       }
@@ -2397,6 +2432,7 @@ export class BotController {
     this.curSealMult = profile.sealWeightMult;
     this.curEntrapWeight = profile.entrapWeight;
     this.curRobustRefuge = profile.robustRefuge;
+    this.curCorridorGate = profile.corridorGate;
 
     const huntStart = profile.huntStartTick;
     const urgency =
