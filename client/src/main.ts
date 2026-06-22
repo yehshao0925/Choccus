@@ -516,7 +516,12 @@ async function bootstrapSolo(params: URLSearchParams): Promise<void> {
 }
 
 const params = new URLSearchParams(window.location.search);
-const mode = params.get('mode');
+// Default mode when ?mode= is absent. Normally the online lobby, but a static
+// deploy with no relay (e.g. GitHub Pages, practice-only) sets
+// VITE_DEFAULT_MODE=solo at build time so the homepage lands on offline
+// practice instead of a lobby that can never connect. Dev/serve builds leave
+// the env unset → unchanged online-lobby default.
+const mode = params.get('mode') ?? import.meta.env.VITE_DEFAULT_MODE ?? null;
 if (mode === 'spectate') {
   void runSpectate(params);
 } else if (mode === 'solo') {
