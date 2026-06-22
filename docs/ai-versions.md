@@ -148,9 +148,12 @@ npm run v3-bench -- --workers=8 --repeats=150            # 兩圖、定版高樣
 npm run v3-bench -- --map=classic --v2=aggressor --workers=8 --repeats=80  # 快速單圖調參迴圈
 npx tsx src/kill-probe.ts --v3=trapper --v2=aggressor --map=classic  # 獵殺機制診斷（壓縮量/接觸時間/擊殺/死亡）
 npx tsx src/v2-rank.ts -- --map=classic                  # 找該圖最強 v2（gate 目標）
-# BT 量尺（v4／v5 開發）
-npm run bt-rank -- --target=v4:zoner --map=classic       # 放上 v3 量尺 → Elo ladder ＋逐對手殘差
-npm run v5-probe -- --target=v6:<arch>                   # 新策略快速 A/B：vs 前沿封鎖者（預設 v5:zoner＋v3:trapper）直接 CRN，不寫 history
+# 開發迴圈（由快到慢，只在有訊號才升級）
+npm run v5-screen -- --save-baseline                     # 一次性：存現役冠軍 baseline（flag off）
+npm run v5-screen                                        # 首篩（翻 flag on）：paired CRN＋early-stop → ESCALATE/DROP/INCONCLUSIVE，~30–60s
+npm run v5-probe -- --target=v6:<arch>                   # 方向確認：vs 前沿封鎖者（預設 v5:zoner＋v3:trapper）直接 CRN，不寫 history
+npm run bt-rank -- --target=v6:zoner --map=classic       # 完整：放上量尺 → Elo ladder ＋逐對手殘差
+npm run meta-rank                                        # 完整：cycle-aware（α-Rank＋Nash）交叉檢查，純讀 history、秒級
 # 歷史工具
 npm run matrix-bench      # 8 agent 1v1 矩陣（v1 vs v2 歷史）
 npm run version-bench     # 4-bot FFA，活 bot vs 前一版
@@ -222,12 +225,16 @@ v3 從 v2 原封複製後演進（v2 凍結不動）。**2026-06-20 大改：勝
 - `bt-seed.ts`（`npm run bt-seed`）：跑 v3 內部 round-robin，寫出全新量尺。**v3 變動時重跑**。
 - `bt-rank.ts`（`npm run bt-rank -- --target=v4:<arch>`）：跑 target vs v3 池 → upsert → 對整份歷史聯合重擬合 → 印全域 ladder（target 就位）＋逐對手殘差。`--no-write` 乾跑。
 - `v5-probe.ts`（`npm run v5-probe -- --target=v<N>:<arch>`）：**新策略快速 A/B 探針**——跑 target vs **前沿封鎖者**（預設＝現役冠軍 `v5:zoner`＋鏡像 `v3:trapper`，`--opponents` 可指定任意 `v<N>:<arch>` 混版本對手）直接 CRN 對打，印逐對手勝率、對 live 冠軍（最高版本對手）的 **SHIP-GATE 判定**，外加可 diff 的 SUMMARY 行。**不擬 BT、不寫 history**，是純開發迴圈工具：改前/改後各跑一次比勝率位移。預設 `--repeats=40`，`--map` 過濾。
+- `v5-screen.ts`（`npm run v5-screen [-- --save-baseline]`）：**最快首篩**（開發迴圈第一關，~30–60 s）。利用「CRN scenarioSeed 與 flag 無關 → 兩次 run 逐 seed 配對」：先 `--save-baseline`（flag off＝現役冠軍）把逐局結果存到 `screen-baseline-<map>.json`（gitignore），再翻 candidate flag on 跑 `v5-screen` → 同 seed 逐局相減（消地圖運氣變異）＋ sequential **early-stop** 的 paired z-test（寬門檻 Z=1.5，**容忍雜訊**）→ 印 **ESCALATE／DROP／INCONCLUSIVE**。預設對手＝ship-gate `v4:zoner`＋mirror `v3:trapper`（gate 顯著變差直接 DROP，擋過擬合）。**只有 ESCALATE 才升級到 `v5-probe`／`bt-rank`**；換冠軍才重存 baseline。`--map`（預設 pirate）／`--max-repeats`／`--block`／`--min-repeats`／`--opponents` 可調。
+- `meta-rank.ts`（`npm run meta-rank [-- --map=<m>]`）：**cycle-aware 評估交叉檢查**。純讀現成 `bt-history`、**不對打、不寫檔、秒級**。印 **α-Rank**（演化響應圖穩態，Omidshafiei et al. 2019）＋ **Nash-averaging**（對稱零和 meta-game 的 Nash 混合評分，Balduzzi et al. 2018，**對 clone 不變**）並列 BT Elo，標出三法不同序的 mid-pool 環，外加 clone check（v4:zoner/v5:zoner 近複製品的 Nash 質量分配＝「v6 池入 v4+v5 會不會扭曲」的實證答案）。是 `bt-rank` 逐對手殘差 hack 的正規版。
 
 ```bash
 cd tools/sim-runner
 npm run bt-seed -- --repeats=60 --workers=8           # 一次性建量尺（v3 變動才重跑）
-npm run bt-rank -- --target=v4:hunter --repeats=60    # 把 v4 單一策略放上量尺
-npm run v5-probe -- --target=v5:disruptor --map=classic  # 開發 v5 時的秒級 A/B（vs 前沿封鎖者）
+npm run v5-screen -- --save-baseline                  # 一次性：存現役冠軍 baseline（flag off）
+npm run v5-screen                                     # 首篩（翻 flag on）：~30–60s → ESCALATE/DROP/INCONCLUSIVE
+npm run bt-rank -- --target=v6:zoner --repeats=60     # 完整：放上量尺
+npm run meta-rank                                     # 完整：cycle-aware 交叉檢查（秒級）
 ```
 
 > 連通性護欄：BT 只在連通分量內共用尺度。target 打完整 v3 池即自動連通；若只打子集且斷開，`bt-rank` 會報出哪些 agent 孤立、要求補對局。
