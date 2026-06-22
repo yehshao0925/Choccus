@@ -208,3 +208,70 @@ Nash 不動點成立；你的 v5-vs-v4 pirate ~50% 其實是**因為 pirate 的 
 | **③** | **線上對手建模 + 單調切換**（`adaptDefense`） | ❌ **試了兩版→還原**（`fc6e439` 最終 revert，v5 逐位元未動） | flag-gated 原型：線上估「sealer aggression」→ 持續高就單調開防守旋鈕。**兩次 pirate A/B（CRN repeats=40），baseline = committed v5（trapper 59.4 / farmer 58.8 / v4 50.6）**：<br>• **retry#1（robustRefuge+corridorGate 都開）**：trapper **55.0**、farmer 57.5、v4 **50.0**。<br>• **retry#2（只開 corridorGate；robustRefuge 是 §十 記載的 pirate-負向槓桿，隔離掉）**：trapper **56.3**、farmer 57.5、v4 50.0。<br>**關鍵診斷**：adaptive corridorGate（56.3）**同時輸給 static-off(59.4) 與 static-on(62.5)** → 問題**不是哪顆旋鈕，是 on/off 切換動態本身**（gate 在交戰中閃爍、不一致地否決自己的彈，比任一穩態都差）。這正是「monotone-in-caution 不夠、要 monotone-in-VALUE」的實證（King/Fern/Hostetler）。**正解＝forward-sim value-dominance gate（較大建置），cheap trigger 此路不通。** |
 
 > **總結**：三條只有 ①（評估層）是淨正、已出貨；② 被 repo 自家 ablation 預判飽和、未建；③ 是有理論依據但 naive 實作淨負、已還原（要做對得上 forward-sim value gate）。v5 主幹**逐位元未動**（②未碰、③已 revert）。**最大可行突破仍是評估升級（①）＋（若投資）③ 的 value-gated 完整版**。
+
+---
+
+## 6. 第二輪 web 驗證 ＋ fusion-panel 三方裁決 ＋ 實測（2026-06-22 下午）
+
+> 起因：原調查（§0–§5）的 WebFetch 全程 403、數字僅 WebSearch 摘要佐證。本輪**重做 web 驗證**
+> （這次 WebFetch 對 HTML 可用、僅 PDF 仍只能取 binary），加跑 `fusion-panel`（Gemini／Llama／gpt-oss
+> ＋一席獨立聯網的 Claude sub-agent），並對唯一未測的便宜槓桿做了 `v5-screen` 實測。
+
+### 6.1 web 驗證：原調查方向性結論**全部成立**（這次有讀到原文/摘要）
+- **搜尋流完勝 RL**：dypm/hakozakijunctions = real-time tree search with pessimistic scenarios 拿下
+  NeurIPS 2018 第 1/3 名，前三皆 tree-search。✅（PMLR v101/osogami19a、arxiv 1902.10870）
+- **2024 最強 RL 只追平**：population self-play + curriculum 達 Elo **~982**，作者原話「**almost equals
+  dypm**」，**未超越**；無 AlphaZero/MuZero 打敗過 Pommerman 搜尋冠軍；2025–2026 無新突破。✅（arxiv 2407.00662）
+- **monotone policy switching**：「minimax policy switching 最壞可任意差；monotone 版 provably no worse
+  than the minimax fixed policy in the set」。✅（King/Fern/Hostetler ICAPS 2013，原文措辭命中）
+- 🆕 **原調查漏掉的一篇關鍵 paper**：**Wang et al., "Know your Enemy: MCTS with Opponent Models in
+  Pommerman", ALA 2023（arxiv 2305.13206）**——把對手模型放進搜尋（two-player transform）：模型**準**時
+  TP-MCTS 勝率 **0.78→0.91**；但「if one would use an optimal player as the opponent model, our agent
+  would plan how to act in the worst-case scenario, irrespective of the actual behavior」，模型**錯/不匹配**
+  時反而傷，self-play 對手模型會退化成「overly passive waiting」。**第二條獨立證據線**佐證 §2.2 的
+  ③（opponent-model-in-search 有效但條件嚴苛、要帶安全下界）。
+
+### 6.2 fusion-panel 三方裁決（盲點獵捕）
+四席對「比 v5 更強的槓桿」獨立作答。**最有料的是獨立聯網的 Claude 席**（與共錨的 Llama/gpt-oss 去相關）：
+- **A1（panel #1 理論重框）**：dypm 的真正教訓不是「悲觀」而是「**悲觀程度是可調超參、靠 self-play 調**」；
+  純 maximin 對「不打最壞尾」的對手（farmer/runner/人類）**系統性低估自己進攻收益** → 提議混合尾
+  `value=(1−β)·maximin+β·heuristic`。
+- **C（pirate 對稱牆）**：引 MAPF corridor-symmetry 文獻——對稱邏輯不可能從內部產生非對稱結果，須注入
+  **外部決定性種子**（slot-id tie-break）。
+- **B**：hard value-dominance gate 不值得大建置，改做 **α-restricted-Nash 軟混合**（連續 α、自帶最壞情況
+  下界、消除 adaptDefense 的閃爍）；模型**只用對手物理量**（位置/火力/逃生分支），**禁用 archetype 分類器**
+  （分類器只認識 eval roster、對人類必崩）；驗收加 **roster 外對照（noise 不得變差）** 防過擬合。
+- **D2**：把防守 `entrapWeight` 反用為**進攻** entrapment（獎勵壓住已被逼進死胡同的敵人），攻「接觸機會」瓶頸。
+
+### 6.3 對 code 覆核 → 兩條 panel 主張被**現實打折**（必須查 code、不能只信 LLM）
+- **A1 其實大半已做**：`v5/core/forwardSearch.ts` 頭註明寫「survivability 取 3 scenario 的 **MIN（maximin）**；
+  **reward 只對 scenario[0]＝樂觀 baseline 算一次**」。即**進攻 reward 本來就用樂觀尾、不悲觀**；悲觀只是
+  純安全地板。故「β 混合尾解開被低估的進攻」這個 panel #1 前提**不成立**（reward 已樂觀）。
+- **C（slot-id）有雙 seating 平均陷阱**：bench 是雙 seating CRN，slot-id 是「綁 slot 不綁策略」→ 對稱鏡像下
+  slot 0 系統性贏＝我方半數場是 slot 0 → net 回 ~50%。正是 doc 作者警告的「別用擲硬幣換邊」。**過不了對稱 gate。**
+
+### 6.4 實測：唯一未測的便宜槓桿 **offEntrap（進攻 entrapment，panel D2）→ DROP**
+加 per-map flag `offEntrap`（reuse `escapeBranches` 算**敵人**格的逃生分支，敵在交戰距內且自身在死胡同時，
+按接近度**獎勵**逼近收割）。default 0＝逐位元 v5。`v5-screen`（paired CRN、early-stop、vs ship-gate v4:zoner
+＋mirror v3:trapper）：
+
+| 地圖 | vs v4:zoner（ship-gate） | vs v3:trapper | 判定 |
+| --- | --- | --- | --- |
+| pirate | **−1.0%**（z−0.6） | +3.1%（z+1.4） | INCONCLUSIVE |
+| classic | **−6.3%**（z−0.8） | +5.2%（z+0.7） | INCONCLUSIVE |
+
+> **抬 trapper、掉 v4 鏡像**——與 §八/§十記載的**每一條進攻槓桿完全相同的「被鏡像讓掉」失敗簽名**。
+> 即「進攻 entrapment」也只是又一條 attack lever。**已 revert，v5 逐位元未動。**
+
+### 6.5 本輪淨結論
+1. **沒有可移植的「更強演算法」**（web 三向確認，含一篇新 paper）。v5 的悲觀搜尋＋安全閘＋縮圈就是 SOTA 配方。
+2. **panel 的新點子對 code 覆核後**：A1 大半已實作；slot-id 有對稱平均陷阱；D2 實測 = 又一條被鏡像讓掉的
+   attack lever（DROP）。→ **bot 層的便宜對症空間已枯竭**（classic 由 corridorGate 收尾、pirate 是對稱牆）。
+3. **唯一仍有理論依據、尚未做對的 bot 層槓桿**：§2.2 ③ 的**正版**＝把對手模型（**只用物理量、不用 archetype
+   分類器**）放進 forward-sim，做 **α-restricted-Nash 軟混合**（非 hard gate、自帶最壞情況下界、驗收帶 roster
+   外 noise 對照）。這是**較大建置 + 過擬合風險**，須走完整三階段管線，非 quick verify 範圍。
+4. **pirate 對稱牆**：bot 層確認近枯竭（slot-id 不可靠），要破只能**改 sim**（非對稱縮圈／komi／決定性 tempo
+   tie-break）＝產品決策。
+
+> 追覽來源（本輪）：arxiv 2305.13206（opponent-model-in-search，**新**）、2407.00662、1902.10870、
+> ICAPS 2013 policy-switching、safe-equilibrium 2201.04266、MAPF symmetry-breaking（SoCS/ICAPS）。
