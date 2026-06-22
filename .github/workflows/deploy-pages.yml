@@ -3,7 +3,10 @@ name: deploy-pages
 # Builds the client as a static, practice-only site and publishes it to
 # GitHub Pages. The build sets VITE_DEFAULT_MODE=solo so the homepage lands on
 # offline practice (no relay needed) and VITE_BASE=/choccus/ for the project
-# site subpath. Online mode is intentionally non-functional here (no relay).
+# site subpath. The subpath MUST match the repository name's exact case
+# (Choccus) — GitHub Pages serves assets case-sensitively, so a lowercase
+# /choccus/ base makes the module script 404 (blank page / CORS error).
+# Online mode is intentionally non-functional here (no relay).
 
 on:
   push:
@@ -37,7 +40,7 @@ jobs:
         run: npm run build
         env:
           VITE_DEFAULT_MODE: solo
-          VITE_BASE: /choccus/
+          VITE_BASE: /Choccus/
 
       - uses: actions/configure-pages@v5
         with:
