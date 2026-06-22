@@ -77,12 +77,12 @@
     {
       "a": "v3:farmer",
       "b": "v5:zoner",
-      "winsA": 44.5,
-      "winsB": 75.5,
-      "draws": 7,
-      "games": 120,
+      "winsA": 26.5,
+      "winsB": 53.5,
+      "draws": 5,
+      "games": 80,
       "meta": {
-        "repeats": 60,
+        "repeats": 40,
         "seedBase": 305419896
       }
     },
@@ -150,11 +150,11 @@
       "a": "v3:hunter",
       "b": "v5:zoner",
       "winsA": 4,
-      "winsB": 116,
+      "winsB": 76,
       "draws": 0,
-      "games": 120,
+      "games": 80,
       "meta": {
-        "repeats": 60,
+        "repeats": 40,
         "seedBase": 305419896
       }
     },
@@ -209,12 +209,12 @@
     {
       "a": "v3:reactive",
       "b": "v5:zoner",
-      "winsA": 3,
-      "winsB": 117,
-      "draws": 2,
-      "games": 120,
+      "winsA": 1,
+      "winsB": 79,
+      "draws": 0,
+      "games": 80,
       "meta": {
-        "repeats": 60,
+        "repeats": 40,
         "seedBase": 305419896
       }
     },
@@ -257,12 +257,12 @@
     {
       "a": "v3:runner",
       "b": "v5:zoner",
-      "winsA": 12.5,
-      "winsB": 107.5,
+      "winsA": 9.5,
+      "winsB": 70.5,
       "draws": 1,
-      "games": 120,
+      "games": 80,
       "meta": {
-        "repeats": 60,
+        "repeats": 40,
         "seedBase": 305419896
       }
     },
@@ -293,12 +293,12 @@
     {
       "a": "v3:trapper",
       "b": "v5:zoner",
-      "winsA": 45,
-      "winsB": 75,
-      "draws": 6,
-      "games": 120,
+      "winsA": 24,
+      "winsB": 56,
+      "draws": 2,
+      "games": 80,
       "meta": {
-        "repeats": 60,
+        "repeats": 40,
         "seedBase": 305419896
       }
     },
@@ -317,12 +317,12 @@
     {
       "a": "v3:zoner",
       "b": "v5:zoner",
-      "winsA": 46,
-      "winsB": 74,
-      "draws": 2,
-      "games": 120,
+      "winsA": 20.5,
+      "winsB": 59.5,
+      "draws": 3,
+      "games": 80,
       "meta": {
-        "repeats": 60,
+        "repeats": 40,
         "seedBase": 305419896
       }
     }
