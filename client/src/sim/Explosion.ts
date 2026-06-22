@@ -9,6 +9,11 @@
  *   bomb's own center cell covers that tile);
  * - otherwise → spawn a cell, continue outward.
  *
+ * Arms read the TICK-START layout, not the grid we mutate as bricks clear: a
+ * brick standing when the tick began blocks EVERY bomb going off this tick, so a
+ * chained bomb can't flow through a brick a sibling just cleared (each arm clears
+ * at most one brick). This matches the AI danger model (dangerMap.ts).
+ *
  * Determinism contract — fixed processing order (PRNG draws happen inside):
  * detonations are processed FIFO starting from bombs whose fuse expired this
  * tick in bomb-array order, appending chained bombs as they are found; each
@@ -72,6 +77,13 @@ export function processDetonations(
     }
   }
 
+  // Tick-start tile layout. Blast arms propagate against THIS, not the grid we
+  // mutate as bricks clear — so a brick standing when the tick began shields what
+  // is behind it from EVERY bomb going off this tick, and each arm clears at most
+  // one brick. Mutating mid-propagation let a chained bomb flow through a brick a
+  // sibling bomb had just cleared and burn players the wall should have stopped.
+  const startGrid = grid.slice();
+
   const cells: ExplosionState[] = [];
   const items: ItemState[] = [];
   const detonatedOwners: number[] = [];
@@ -89,18 +101,26 @@ export function processDetonations(
       for (let step = 1; step <= bomb.fire; step++) {
         const tx = bomb.tileX + dx * step;
         const ty = bomb.tileY + dy * step;
-        if (!inBounds(tx, ty) || grid[idx(tx, ty)] === TileKind.HARD) break;
-        if (grid[idx(tx, ty)] === TileKind.SOFT) {
-          grid[idx(tx, ty)] = TileKind.EMPTY;
-          // The just-cleared tile gets NO flame cell: it is immediately safe
-          // to enter, so a player can rush in and grab a dropped item without
-          // being burned. The arm still stops here.
-          let roll: number;
-          [roll, p] = prngFloat(p);
-          if (roll < ITEM_DROP_RATE) {
-            let kind: number;
-            [kind, p] = prngInt(p, 0, 2);
-            items.push({ tileX: tx, tileY: ty, kind: kind as ItemKind });
+        const cell = idx(tx, ty);
+        // Read the tick-start layout: a brick a sibling bomb already cleared this
+        // tick still blocks here (and HARD never changes mid-tick anyway).
+        if (!inBounds(tx, ty) || startGrid[cell] === TileKind.HARD) break;
+        if (startGrid[cell] === TileKind.SOFT) {
+          // Clear the brick + roll its drop ONCE per tick — the first arm to reach
+          // it. A later arm meeting the same tick-start brick still stops here but
+          // neither re-clears nor re-rolls (grid is already EMPTY there).
+          if (grid[cell] === TileKind.SOFT) {
+            grid[cell] = TileKind.EMPTY;
+            // The just-cleared tile gets NO flame cell: it is immediately safe
+            // to enter, so a player can rush in and grab a dropped item without
+            // being burned. The arm still stops here.
+            let roll: number;
+            [roll, p] = prngFloat(p);
+            if (roll < ITEM_DROP_RATE) {
+              let kind: number;
+              [kind, p] = prngInt(p, 0, 2);
+              items.push({ tileX: tx, tileY: ty, kind: kind as ItemKind });
+            }
           }
           break;
         }
