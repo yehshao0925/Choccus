@@ -79,8 +79,4 @@ export const PIRATE_PROFILE: MapProfile = Object.freeze({
   // mirror it only vetoes the bot's own useful bombs and can't touch the real death
   // (the shrink wall, not a foe seal). So pirate keeps false; classic-only win.
   corridorGate: false,
-  // v6 PROTOTYPE — ADAPTIVE DEFENSE: OFF by default (committed pirate is unchanged).
-  // The A/B flips this true to test the monotone switch (keep robustRefuge/corridorGate
-  // off vs farmers for tempo, flip them on only vs a detected sealer).
-  adaptDefense: false,
 });

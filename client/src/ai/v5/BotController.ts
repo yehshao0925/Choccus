@@ -430,20 +430,6 @@ const ENTRAP_BRANCH_TARGET = 2;
  * bounded; only runs while a foe is within combat range). */
 const ENTRAP_FLOOD_CAP = 12;
 
-// v6 PROTOTYPE — ADAPTIVE DEFENSE (MapProfile.adaptDefense): online sealer-aggression
-// estimate + monotone switch constants. Fast up / slow down so a detected sealer keeps
-// the defensive knobs on through its vChain even between bomb placements (hysteresis).
-/** Manhattan radius within which a foe's live bomb counts as "pressing us". */
-const FOE_AGGRO_BOMB_RANGE = 3;
-/** Per-decision rise when a foe is in combat range AND pressing us with a bomb. */
-const FOE_AGGRO_UP = 25;
-/** Per-decision decay otherwise. */
-const FOE_AGGRO_DOWN = 4;
-/** Ceiling for the estimate (clamps so a long seal does not over-accumulate). */
-const FOE_AGGRO_CAP = 100;
-/** Sustained estimate at/above which the monotone defensive switch engages. */
-const FOE_AGGRO_ON = 50;
-
 /** A scored candidate action. */
 interface Candidate {
   /** Direction bit for a move, Direction.NONE for STAY / PLACE_BOMB. */
@@ -540,15 +526,6 @@ export class BotController {
    * combat range — its only refuge is a single-exit corridor (escapeBranches < 2)
    * a follow-up seal can cap. classic on, pirate off. */
   private curCorridorGate = false;
-
-  /**
-   * v6 PROTOTYPE — online "sealer aggression" estimate of the nearest foe, for the
-   * MONOTONE adaptive-defense switch (MapProfile.adaptDefense). Integer in
-   * [0, FOE_AGGRO_CAP]: rises while a foe is in combat range AND has live bombs
-   * pressing us, decays otherwise. Sustained ≥ FOE_AGGRO_ON ⇒ raise defensive knobs.
-   * Hysteresis (fast up, slow down) keeps the switch from thrashing. Deterministic.
-   */
-  private foeAggro = 0;
 
   /** 反應流 Reactive: nearest-foe tile + foe bomb count seen LAST decision, so we
    * can derive the foe's last action (move direction / fresh bomb) to mirror. */
@@ -805,24 +782,6 @@ export class BotController {
       tiles.add(idx(tileOf(p.posX), tileOf(p.posY)));
     }
     return tiles;
-  }
-
-  /**
-   * v6 PROTOTYPE — is an ENEMY-team bomb live within FOE_AGGRO_BOMB_RANGE Manhattan
-   * tiles of us? Used by the adaptive-defense estimate as the "a sealer is pressing
-   * us right now" signal. Deterministic integer scan; no RNG / irrational math.
-   */
-  private foeBombPressing(state: SimState, myTeam: number, myX: number, myY: number): boolean {
-    for (const b of state.bombs) {
-      if (Math.abs(b.tileX - myX) + Math.abs(b.tileY - myY) > FOE_AGGRO_BOMB_RANGE) continue;
-      for (const p of state.players) {
-        if (p.slot === b.ownerSlot) {
-          if (p.team !== myTeam) return true;
-          break;
-        }
-      }
-    }
-    return false;
   }
 
   /**
@@ -2523,32 +2482,6 @@ export class BotController {
       const ffy = (nearestFoeTileIdx - ffx) / MAP_COLS;
       if (this.foeFreeSpace(state, danger, ffx, ffy, null) <= CORNER_FREE_THRESHOLD) {
         this.curZoneStandoff = 1;
-      }
-    }
-
-    // v6 PROTOTYPE — ADAPTIVE DEFENSE (online opponent model + MONOTONE switch).
-    // Update the nearest foe's "sealer aggression" estimate, then — while it is
-    // sustained high — MONOTONICALLY raise defensive knobs (robustRefuge +
-    // corridorGate forced on, entrap kept strong). We only ever ADD caution, never
-    // remove it, so the worst case is no worse than the static profile (the safe
-    // direction of adversarial policy switching). On pirate this keeps the tempo-
-    // costing defensive knobs OFF vs passive farmers and flips them ON only once a
-    // trapper-style sealer is detected — resolving the static either/or.
-    if (profile.adaptDefense) {
-      const combatRange = this.tuning.combatRangeTiles ?? 5;
-      const pressing =
-        nearestFoeTileIdx >= 0 &&
-        foeDist <= combatRange &&
-        this.foeBombPressing(state, myTeam, myX, myY);
-      this.foeAggro = pressing
-        ? Math.min(FOE_AGGRO_CAP, this.foeAggro + FOE_AGGRO_UP)
-        : Math.max(0, this.foeAggro - FOE_AGGRO_DOWN);
-      if (this.foeAggro >= FOE_AGGRO_ON) {
-        this.curRobustRefuge = true;
-        this.curCorridorGate = true;
-        if (this.curEntrapWeight < profile.entrapWeight) {
-          this.curEntrapWeight = profile.entrapWeight;
-        }
       }
     }
 

@@ -140,7 +140,4 @@ export const CLASSIC_PROFILE: MapProfile = Object.freeze({
   // corridor while a foe is near (the trapper vChain-seal death the v5-trace showed).
   // classic on.
   corridorGate: true,
-  // v6 PROTOTYPE — ADAPTIVE DEFENSE: OFF on classic (robustRefuge/corridorGate are
-  // already statically ON here, so there is nothing for the monotone switch to raise).
-  adaptDefense: false,
 });

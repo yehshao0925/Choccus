@@ -264,24 +264,4 @@ export interface MapProfile {
    * wall, not a foe seal, so this would only veto useful bombs). false = v4 gate.
    */
   readonly corridorGate: boolean;
-  /**
-   * v6 PROTOTYPE — ADAPTIVE DEFENSE (online opponent modelling + MONOTONE policy
-   * switch). When true, the bot maintains a deterministic, integer estimate of the
-   * nearest foe's "sealer aggression" (it rises while a foe is in combat range AND
-   * has live bombs pressing us, decays otherwise). While that estimate is sustained
-   * HIGH the bot MONOTONICALLY raises its defensive knobs for this decision —
-   * `robustRefuge` and `corridorGate` are forced ON (and entrap kept strong) — and
-   * NEVER lowers any caution. This is the safe-by-construction direction of
-   * adversarial policy switching (King/Fern/Hostetler, ICAPS 2013): switching only
-   * toward a strictly-more-defensive tuning cannot reduce survivability, so the
-   * worst case is no worse than the static profile.
-   *
-   * The point is PIRATE, where `robustRefuge`/`corridorGate` are statically OFF
-   * because they help vs a trapper-style sealer but cost farming tempo vs the v3
-   * dev-racers — an either/or a static profile cannot win. The online switch keeps
-   * them OFF vs passive farmers (tempo preserved) and flips them ON only once a
-   * sealer is detected, resolving the documented tradeoff. false = no adaptation
-   * (byte-identical to committed v5; the estimate is not even computed).
-   */
-  readonly adaptDefense: boolean;
 }
