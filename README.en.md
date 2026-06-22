@@ -1,10 +1,10 @@
-# Cocoa Clash (Choccus)
+# Choccus（奶油啵啵爆）
 
 > 🌐 **Language / 語言**：[中文（主要 / primary）](./README.md) ｜ **English (this page)**
 
-A chocolate-themed real-time online multiplayer game on a grid. Place cakes,
-detonate them into a cross-shaped blast, and let the sticky cream trap your
-opponents — then rescue teammates before time runs out.
+A chocolate-and-cake-themed real-time online multiplayer game on a grid. Place
+cakes, detonate them into a cross-shaped blast, and let the sticky cream trap
+your opponents — then rescue teammates before time runs out.
 
 > This file is the quick-start guide (install, run, deploy, test, architecture).
 > The AI version status and eval flow lives in
