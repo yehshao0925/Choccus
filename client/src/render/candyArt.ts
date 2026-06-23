@@ -19,8 +19,10 @@ export const TH = 44;
 export const PAD_X = 16;
 export const PAD_TOP = 24;
 export const PAD_BOT = 14;
-const POP_WALL = 13;
-const POP_BLOCK = 9;
+// Subtle thickness so tiles overlap the row behind (via per-row z-index in the
+// Renderer) — a gentle layered look, not the old chunky 2.5D cube.
+const POP_WALL = 7;
+const POP_BLOCK = 5;
 const CX = TW / 2; // 24
 const CY = TH / 2; // 22
 
@@ -42,16 +44,21 @@ const MILK = {
   floorB: '#E2BC80',
   wall: { hi: '#8C5C36', base: '#5E3A20', lo: '#341F0E' },
   block: { hi: '#FFF7E8', base: '#F2DFBC', lo: '#D6B988' },
-  bombHi: '#7a5238',
-  bombMid: '#3f2415',
-  bombLo: '#1c0d07',
+  // Near-black glossy truffle — distinct from the mid-brown matte wall cubes.
+  bombHi: '#4a2a1a',
+  bombMid: '#220f06',
+  bombLo: '#080302',
   spark: '#FFE3A1',
   sparkGlow: '#FF9B3D',
-  explGlow: 'rgba(110,64,32,.55)',
-  explHi: '#C98A50',
-  explMid: '#8A5226',
-  explLo: '#4E2A12',
-  explCore: '#F4D7A0',
+  // Cream melt-flow (奶油流): whipped-white stream over a saturated amber halo
+  // (the "火力"); the halo is far more orange than the tan floor, so the flow
+  // reads even though both cream and floor are pale. explShadow lifts it off.
+  explGlow: 'rgba(255,124,30,.62)',
+  explHi: '#FFFFFF',
+  explMid: '#FFF1D6',
+  explLo: '#FBD99E',
+  explCore: '#FFE6B4',
+  explShadow: 'rgba(120,64,22,.42)',
   eye: '#3A2A22',
   cheek: 'rgba(244,120,150,.55)',
 } as const;
@@ -106,18 +113,63 @@ export function floorHtml(checker: number): string {
   );
 }
 
-/** Raised 2.5D cube faces for a hard wall or soft brick. */
+/**
+ * Simple-dessert tile with a *gentle* thickness: a flat dessert top raised by a
+ * small `pop` over a soft side face — so front-row tiles overlap the row behind
+ * (ordered by the Renderer's per-row z-index). No blurred cast shadow (that read
+ * as a weird shadow band); the side IS the only depth cue. Hard wall = glossy
+ * dark-chocolate; soft brick = layered cake (sponge + cream frosting cap).
+ */
 export function cubeHtml(kind: 'wall' | 'block'): string {
-  const c = kind === 'wall' ? MILK.wall : MILK.block;
   const pop = kind === 'wall' ? POP_WALL : POP_BLOCK;
+  const x = 2;
+  const w = TW - 4;
+  const topH = TH - 4; // flat top surface
+  const sideTop = -pop + topH; // flush with the top face's (square) bottom edge
+  const sideH = pop + 6; // down to the cell bottom (+ slight overflow to overlap)
+  if (kind === 'wall') {
+    // One rounded silhouette: top rounds only its TOP corners, side only its
+    // BOTTOM — same x/width so they fuse; gradients meet at `base` (smooth seam,
+    // side darkens to `lo` = the thickness). No blurred cast shadow.
+    const c = MILK.wall;
+    return (
+      `<div style="position:absolute;left:${x}px;top:${sideTop}px;width:${w}px;height:${sideH}px;` +
+      `border-radius:0 0 12px 12px;background:linear-gradient(180deg,${c.base},${c.lo});"></div>` +
+      `<div style="position:absolute;left:${x}px;top:${-pop}px;width:${w}px;height:${topH}px;border-radius:12px 12px 0 0;` +
+      `background:linear-gradient(160deg,${c.hi},${c.base});` +
+      `box-shadow:inset 0 3px 4px rgba(255,255,255,.16);"></div>` +
+      `<div style="position:absolute;left:9px;top:${-pop + 5}px;width:${TW - 28}px;height:8px;border-radius:8px;` +
+      `background:radial-gradient(closest-side,rgba(255,255,255,.42),transparent);"></div>`
+    );
+  }
+  // Soft brick = layered cake: sponge side + raised sponge top, a cream filling
+  // band through the middle (奶油/海綿 layering), a cream frosting cap, and a few
+  // chocolate sprinkles (巧克力米) scattered on top.
   return (
-    `<div style="position:absolute;left:4px;top:${TH - pop - 2}px;width:${TW - 8}px;height:${pop + 6}px;` +
-    `border-radius:0 0 13px 13px;background:${c.lo};"></div>` +
-    `<div style="position:absolute;left:2px;top:${-pop}px;width:${TW - 4}px;height:${TH - 2}px;` +
-    `border-radius:16px 16px 13px 13px;background:linear-gradient(168deg,${c.hi},${c.base} 54%,${c.lo});` +
-    `box-shadow:0 3px 6px rgba(72,40,18,.16),inset 0 -5px 7px rgba(60,32,14,.16),inset 0 5px 8px rgba(255,255,255,.4);"></div>` +
-    `<div style="position:absolute;left:9px;top:${-pop + 5}px;width:${TW - 24}px;height:13px;` +
-    `border-radius:9px;background:radial-gradient(closest-side,rgba(255,255,255,.6),rgba(255,255,255,0));"></div>`
+    `<div style="position:absolute;left:${x}px;top:${sideTop}px;width:${w}px;height:${sideH}px;` +
+    `border-radius:0 0 12px 12px;background:linear-gradient(180deg,#DCBC82,#C7A569);"></div>` +
+    `<div style="position:absolute;left:${x}px;top:${-pop}px;width:${w}px;height:${topH}px;border-radius:12px 12px 0 0;` +
+    `background:linear-gradient(180deg,#EFD6A6,#DCBC82);"></div>` +
+    // cream filling band through the middle → a visible cream/sponge layer
+    `<div style="position:absolute;left:${x}px;top:${-pop + 19}px;width:${w}px;height:6px;` +
+    `background:linear-gradient(180deg,#FFF3DC,#F0DBB4);box-shadow:0 1px 0 rgba(150,108,58,.18);"></div>` +
+    // frosting cap
+    `<div style="position:absolute;left:${x}px;top:${-pop}px;width:${w}px;height:17px;border-radius:12px 12px 9px 9px;` +
+    `background:linear-gradient(180deg,#FFF8EC,#FBE9CD);box-shadow:inset 0 2px 2px rgba(255,255,255,.7);"></div>` +
+    // colourful sprinkles (彩色巧克力米) on the frosting
+    sprinkle(8, -pop + 1, 26, '#F2849E') + // strawberry
+    sprinkle(19, -pop + 5, -18, '#7FD1B9') + // mint
+    sprinkle(29, -pop + 1, 42, '#F5C542') + // lemon
+    sprinkle(34, -pop + 7, -34, '#8FA8E8') + // blueberry
+    sprinkle(15, -pop + 8, 8, '#5E3A20') // chocolate
+  );
+}
+
+/** One chocolate-vermicelli dash for the cake topping. */
+function sprinkle(left: number, top: number, deg: number, color: string): string {
+  return (
+    `<div style="position:absolute;left:${left}px;top:${top}px;width:6px;height:2px;border-radius:1px;` +
+    `background:${color};transform:rotate(${deg}deg);"></div>`
   );
 }
 
@@ -145,42 +197,74 @@ export function bombHtml(): string {
   );
 }
 
-/** Candy-diamond power-up, tinted per item kind. */
+/**
+ * Power-up: a glossy candy pill (kind-tinted glow) carrying a bold icon that
+ * reads its function at a glance — FIRE = flame (bigger blast), SPEED = lightning
+ * (faster), CANNON = mini bomb (more bombs).
+ */
 export function itemHtml(kind: number): string {
   const p = ITEM_PAL[kind] ?? ITEM_PAL[ItemKind.FIRE]!;
-  return (
-    `<div style="position:absolute;left:${CX - 24}px;top:${CY - 26}px;width:48px;height:48px;border-radius:50%;` +
-    `background:radial-gradient(circle,${p.glow},transparent 64%);"></div>` +
-    `<div style="position:absolute;left:${CX - 14}px;top:${CY - 16}px;width:28px;height:28px;border-radius:9px;` +
-    `transform:rotate(45deg);background:linear-gradient(135deg,${p.a},${p.b});` +
-    `box-shadow:0 5px 8px rgba(0,0,0,.22),inset 0 2px 3px rgba(255,255,255,.5);"></div>` +
-    `<div style="position:absolute;left:${CX - 8}px;top:${CY - 10}px;width:8px;height:8px;border-radius:50%;` +
-    `background:rgba(255,255,255,.85);"></div>`
-  );
+  const base =
+    `<div style="position:absolute;left:${CX - 22}px;top:${CY - 22}px;width:44px;height:44px;border-radius:50%;` +
+    `background:radial-gradient(circle,${p.glow},transparent 66%);"></div>` +
+    `<div style="position:absolute;left:${CX - 15}px;top:${CY - 15}px;width:30px;height:30px;border-radius:50%;` +
+    `background:radial-gradient(circle at 38% 30%,#FFFFFF,#FCEFD8);` +
+    `box-shadow:0 4px 6px rgba(90,52,24,.22),inset 0 -3px 4px rgba(120,80,40,.14),inset 0 3px 4px rgba(255,255,255,.85);"></div>`;
+  let icon: string;
+  if (kind === ItemKind.CANNON) {
+    // mini truffle bomb = "more bombs"
+    icon =
+      `<div style="position:absolute;left:${CX - 8}px;top:${CY - 7}px;width:16px;height:16px;border-radius:50%;` +
+      `background:radial-gradient(circle at 36% 30%,#5a3a2a,#220f06 60%,#080302);box-shadow:inset 0 -1px 2px rgba(0,0,0,.5);"></div>` +
+      `<div style="position:absolute;left:${CX + 4}px;top:${CY - 11}px;width:4px;height:4px;border-radius:50%;` +
+      `background:${MILK.spark};box-shadow:0 0 6px 2px ${MILK.sparkGlow};"></div>`;
+  } else if (kind === ItemKind.SPEED) {
+    // lightning bolt = "faster"
+    icon =
+      `<div style="position:absolute;left:${CX - 8}px;top:${CY - 10}px;width:16px;height:19px;` +
+      `background:linear-gradient(160deg,#FFE07A,#F5A623);filter:drop-shadow(0 1px 1px rgba(150,90,20,.4));` +
+      `clip-path:polygon(58% 0,24% 56%,48% 56%,40% 100%,80% 40%,54% 40%,74% 0);"></div>`;
+  } else {
+    // flame = "bigger blast" (FIRE)
+    icon =
+      `<div style="position:absolute;left:${CX - 8}px;top:${CY - 10}px;width:16px;height:19px;` +
+      `background:linear-gradient(180deg,#FFD23D,#FF7A2D 55%,#E83A2E);` +
+      `clip-path:polygon(50% 0,68% 28%,60% 44%,78% 64%,64% 100%,36% 100%,22% 64%,40% 44%,32% 28%);"></div>` +
+      `<div style="position:absolute;left:${CX - 3}px;top:${CY}px;width:6px;height:9px;` +
+      `background:linear-gradient(180deg,#FFF2B0,#FFB04D);clip-path:polygon(50% 0,80% 55%,50% 100%,20% 55%);"></div>`;
+  }
+  return base + icon;
 }
 
-/** Melt-flow cell. `center` adds the bright ring + core + droplets. */
+/**
+ * Melt-flow cell. The cream body and amber halo are BOTH oversized (overflow the
+ * cell), so adjacent burning cells overlap into one continuous cream stream with
+ * a fused glowing corridor — no goo-filter needed. All fills are radial/solid
+ * (no box-shadow blur on the many arm cells) to stay cheap on a chain. `center`
+ * adds the white-hot core + droplets.
+ */
 export function explosionHtml(center: boolean): string {
-  // Arm cells (the many ones in a cross/chain) use ONLY radial-gradient fills —
-  // no box-shadow blur — so a burst of cells stays cheap to rasterize. The soft
-  // halo comes from the large gradient glow div, not a per-cell shadow.
   let h =
-    `<div style="position:absolute;left:${CX - 50}px;top:${CY - 46}px;width:100px;height:92px;border-radius:50%;` +
-    `background:radial-gradient(circle,${MILK.explGlow},transparent 68%);"></div>` +
-    `<div style="position:absolute;left:${CX - 26}px;top:${CY - 24}px;width:52px;height:48px;` +
-    `border-radius:52% 48% 50% 50%/56% 52% 48% 44%;` +
-    `background:radial-gradient(circle at 42% 36%,${MILK.explHi},${MILK.explMid} 56%,${MILK.explLo});"></div>`;
+    // Amber halo — the "火力". Wide enough that neighbours' halos merge into a
+    // glowing river and lift the pale cream off the pale floor.
+    `<div style="position:absolute;left:${CX - 38}px;top:${CY - 35}px;width:76px;height:70px;border-radius:50%;` +
+    `background:radial-gradient(circle,${MILK.explGlow},transparent 72%);"></div>` +
+    // Soft contact shadow under the cream → reads as a raised flow, not floor.
+    `<div style="position:absolute;left:${CX - 28}px;top:${CY - 18}px;width:56px;height:52px;border-radius:50%;` +
+    `background:radial-gradient(closest-side,${MILK.explShadow},transparent);"></div>` +
+    // Flowing cream body — oversized (56×52 in a 48×44 cell) so runs merge.
+    `<div style="position:absolute;left:${CX - 28}px;top:${CY - 26}px;width:56px;height:52px;` +
+    `border-radius:52% 48% 50% 50%/54% 50% 50% 46%;` +
+    `background:radial-gradient(circle at 42% 34%,${MILK.explHi},${MILK.explMid} 50%,${MILK.explLo});"></div>`;
   if (center) {
     // Only one centre cell per blast → a little extra detail here is affordable.
     h +=
-      `<div style="position:absolute;left:${CX - 33}px;top:${CY - 29}px;width:66px;height:58px;border-radius:50%;` +
-      `border:5px solid ${MILK.explMid};opacity:.5;"></div>` +
       `<div style="position:absolute;left:${CX - 16}px;top:${CY - 14}px;width:32px;height:28px;border-radius:50%;` +
-      `background:radial-gradient(circle,${MILK.explCore},${MILK.explHi} 70%);box-shadow:0 0 12px 3px ${MILK.explCore};"></div>` +
-      `<div style="position:absolute;left:${CX - 34}px;top:${CY - 24}px;width:12px;height:12px;border-radius:50%;background:${MILK.explMid};"></div>` +
-      `<div style="position:absolute;left:${CX + 22}px;top:${CY - 20}px;width:10px;height:10px;border-radius:50%;background:${MILK.explHi};"></div>` +
-      `<div style="position:absolute;left:${CX - 28}px;top:${CY + 16}px;width:9px;height:9px;border-radius:50%;background:${MILK.explLo};"></div>` +
-      `<div style="position:absolute;left:${CX + 26}px;top:${CY + 14}px;width:11px;height:11px;border-radius:50%;background:${MILK.explMid};"></div>`;
+      `background:radial-gradient(circle,#fff,${MILK.explCore} 72%);box-shadow:0 0 14px 4px ${MILK.explGlow};"></div>` +
+      `<div style="position:absolute;left:${CX - 30}px;top:${CY - 22}px;width:11px;height:11px;border-radius:50%;background:${MILK.explLo};"></div>` +
+      `<div style="position:absolute;left:${CX + 21}px;top:${CY - 18}px;width:9px;height:9px;border-radius:50%;background:${MILK.explHi};"></div>` +
+      `<div style="position:absolute;left:${CX - 26}px;top:${CY + 15}px;width:8px;height:8px;border-radius:50%;background:${MILK.explMid};"></div>` +
+      `<div style="position:absolute;left:${CX + 24}px;top:${CY + 13}px;width:10px;height:10px;border-radius:50%;background:${MILK.explLo};"></div>`;
   }
   return h;
 }

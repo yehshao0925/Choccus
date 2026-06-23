@@ -53,6 +53,12 @@ import { lerp, SNAP_THRESHOLD_MT } from './interpolate';
 /** Default controls hint (the local hotseat / solo mode). */
 export const HOTSEAT_HINT = '方向鍵移動 · 空白鍵放巧克力 · R 重新開始';
 
+// Painter z-index = row*10 + type rank, so a front-row (larger y) cube paints
+// over an entity in the row behind it. Within a row: floor/cube < item < bomb <
+// player < explosion < shell.
+const Z = { TILE: 0, ITEM: 1, BOMB: 2, PLAYER: 3, EXPL: 4, SHELL: 5 } as const;
+const rowZ = (row: number, rank: number): string => String(row * 10 + rank);
+
 function div(css: string, parent?: HTMLElement): HTMLDivElement {
   const d = document.createElement('div');
   d.style.cssText = css;
@@ -98,8 +104,11 @@ export class Renderer {
     string,
     { node: HTMLDivElement; center: boolean; op: string }
   >();
-  private readonly playerPool = new Map<number, { node: HTMLDivElement; sig: string }>();
-  private readonly shellPool = new Map<number, { node: HTMLDivElement; num: HTMLDivElement }>();
+  private readonly playerPool = new Map<number, { node: HTMLDivElement; sig: string; z: string }>();
+  private readonly shellPool = new Map<
+    number,
+    { node: HTMLDivElement; num: HTMLDivElement; z: string }
+  >();
   private readonly cardPool = new Map<number, CardView>();
   private readonly tileNodes: HTMLDivElement[] = [];
 
@@ -128,18 +137,21 @@ export class Renderer {
         'border-radius:22px;box-shadow:0 22px 54px rgba(80,50,25,.2);',
       this.root,
     );
-    // The 195 shadow-heavy tiles rebuild only on map change, so pin them to
-    // their own GPU layer: entity movement above never repaints them.
-    this.tileLayer = div('position:absolute;inset:0;will-change:transform;', board);
-    this.itemLayer = div('position:absolute;inset:0;', board);
-    this.bombLayer = div('position:absolute;inset:0;', board);
-    this.playerLayer = div('position:absolute;inset:0;', board);
-    this.explLayer = div('position:absolute;inset:0;', board);
-    this.shellLayer = div('position:absolute;inset:0;', board);
+    // One stacking context: every tile/entity is a direct child of the board and
+    // ordered by a per-row z-index (see Z_* / rowZ), so a raised cube in a front
+    // row correctly occludes an entity standing in the row behind it. Separate
+    // full-board layers would force all entities above all tiles and break that.
+    this.tileLayer =
+      this.itemLayer =
+      this.bombLayer =
+      this.playerLayer =
+      this.explLayer =
+      this.shellLayer =
+        board;
 
     // Floating truffle timer pill (design signature), top-centre over the board.
     this.timer = div(
-      `position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:5;` +
+      `position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:1000;` +
         `display:none;align-items:center;justify-content:center;height:48px;padding:0 26px;` +
         `background:linear-gradient(180deg,#6B4326,#4A2A18);border-radius:999px;` +
         `box-shadow:0 8px 18px rgba(74,42,24,.4),inset 0 2px 0 rgba(255,255,255,.12);` +
@@ -216,7 +228,7 @@ export class Renderer {
         for (let x = 0; x < MAP_COLS; x++) {
           const node = div(
             `position:absolute;left:${cellLeft(x)}px;top:${cellTop(y)}px;` +
-              `width:${TW}px;height:${TH}px;`,
+              `width:${TW}px;height:${TH}px;z-index:${rowZ(y, Z.TILE)};`,
           );
           node.innerHTML = tileInner(map[idx(x, y)] ?? TileKind.EMPTY, x, y);
           this.tileLayer.appendChild(node);
@@ -251,7 +263,7 @@ export class Renderer {
       if (node === undefined) {
         node = div(
           `position:absolute;left:${cellLeft(it.tileX)}px;top:${cellTop(it.tileY)}px;` +
-            `width:${TW}px;height:${TH}px;`,
+            `width:${TW}px;height:${TH}px;z-index:${rowZ(it.tileY, Z.ITEM)};`,
         );
         node.innerHTML = itemHtml(it.kind);
         this.itemLayer.appendChild(node);
@@ -274,7 +286,7 @@ export class Renderer {
       if (node === undefined) {
         node = div(
           `position:absolute;left:${cellLeft(b.tileX)}px;top:${cellTop(b.tileY)}px;` +
-            `width:${TW}px;height:${TH}px;will-change:transform;`,
+            `width:${TW}px;height:${TH}px;will-change:transform;z-index:${rowZ(b.tileY, Z.BOMB)};`,
         );
         node.innerHTML = bombHtml();
         this.bombLayer.appendChild(node);
@@ -300,7 +312,7 @@ export class Renderer {
           `position:absolute;left:0;top:0;width:${TW}px;height:${TH}px;will-change:transform;`,
         );
         this.playerLayer.appendChild(node);
-        v = { node, sig: '' };
+        v = { node, sig: '', z: '' };
         this.playerPool.set(pl.slot, v);
       }
       if (v.sig !== sig) {
@@ -317,6 +329,11 @@ export class Renderer {
       const left = PAD_X + tx * TW;
       const top = PAD_TOP + ty * TH;
       v.node.style.transform = `translate3d(${left}px,${top}px,0)`;
+      const z = rowZ(Math.round(ty), Z.PLAYER);
+      if (v.z !== z) {
+        v.node.style.zIndex = z;
+        v.z = z;
+      }
       v.node.style.display = 'block';
     }
     for (const [slot, v] of this.playerPool) {
@@ -344,7 +361,7 @@ export class Renderer {
         // paint above the already-cached tile layer, so tiles aren't repainted.
         const node = div(
           `position:absolute;left:${cellLeft(c.tileX)}px;top:${cellTop(c.tileY)}px;` +
-            `width:${TW}px;height:${TH}px;`,
+            `width:${TW}px;height:${TH}px;z-index:${rowZ(c.tileY, Z.EXPL)};`,
         );
         this.explLayer.appendChild(node);
         v = { node, center: !center, op: '' };
@@ -387,12 +404,17 @@ export class Renderer {
         );
         node.appendChild(num);
         this.shellLayer.appendChild(node);
-        v = { node, num };
+        v = { node, num, z: '' };
         this.shellPool.set(pl.slot, v);
       }
       const prevPl = prev.players.find((p) => p.slot === pl.slot);
       const { tx, ty } = tileFrac(prevPl, pl, alpha);
       v.node.style.transform = `translate3d(${PAD_X + tx * TW}px,${PAD_TOP + ty * TH}px,0)`;
+      const z = rowZ(Math.round(ty), Z.SHELL);
+      if (v.z !== z) {
+        v.node.style.zIndex = z;
+        v.z = z;
+      }
       v.num.textContent = (pl.trappedTicks / TICK_HZ).toFixed(1);
       v.node.style.display = 'block';
     }
