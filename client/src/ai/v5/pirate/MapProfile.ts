@@ -79,4 +79,8 @@ export const PIRATE_PROFILE: MapProfile = Object.freeze({
   // mirror it only vetoes the bot's own useful bombs and can't touch the real death
   // (the shrink wall, not a foe seal). So pirate keeps false; classic-only win.
   corridorGate: false,
+  // v5 FARMING CADENCE: ON for pirate. The open map converts faster farm tempo
+  // (no-waste + pre-place, skipping the bombChance throttle) into a development
+  // lead — screen paired +18.8% vs the trapper mirror, gate (v4) flat.
+  farmCadence: true,
 });

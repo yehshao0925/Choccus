@@ -151,27 +151,35 @@ class SfxEngine {
   }
 
   /**
-   * explode() — warm filtered-noise "whoomph" with quick decay.
-   * Lowpass-swept noise (3 kHz → 200 Hz) + low sine thump (80 Hz).
-   * 500 ms total.
+   * explode() — deep, low "whoomph" with a heavy sub-bass thud.
+   * Lowpass-swept noise (1.2 kHz → 90 Hz) + low sine thump (55→30 Hz)
+   * + sub-bass sine (38→22 Hz) for body. Longer decay for weight.
+   * ~700 ms total.
    */
   explode(): void {
     const ctx = this.ensure();
     if (ctx === null) return;
     const t = ctx.currentTime;
 
-    // Noise whoomph.
-    const [, filt, nEnv] = this.noise('lowpass', 3000, t, 0.5);
-    filt.frequency.exponentialRampToValueAtTime(200, t + 0.4);
-    nEnv.gain.setValueAtTime(0.55, t);
-    nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    // Noise whoomph — darker filter sweep, longer tail.
+    const [, filt, nEnv] = this.noise('lowpass', 1200, t, 0.7);
+    filt.frequency.exponentialRampToValueAtTime(90, t + 0.5);
+    nEnv.gain.setValueAtTime(0.5, t);
+    nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
 
     // Low sine thump.
-    const [osc, oEnv] = this.osc('sine', 80, t);
-    osc.frequency.setTargetAtTime(40, t, 0.05);
-    oEnv.gain.setValueAtTime(0.5, t);
-    oEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
-    osc.stop(t + 0.31);
+    const [osc, oEnv] = this.osc('sine', 55, t);
+    osc.frequency.setTargetAtTime(30, t, 0.06);
+    oEnv.gain.setValueAtTime(0.55, t);
+    oEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    osc.stop(t + 0.46);
+
+    // Sub-bass body — felt more than heard, gives the "low" weight.
+    const [sub, sEnv] = this.osc('sine', 38, t);
+    sub.frequency.setTargetAtTime(22, t, 0.08);
+    sEnv.gain.setValueAtTime(0.45, t);
+    sEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    sub.stop(t + 0.56);
   }
 
   /**

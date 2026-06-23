@@ -264,4 +264,18 @@ export interface MapProfile {
    * wall, not a foe seal, so this would only veto useful bombs). false = v4 gate.
    */
   readonly corridorGate: boolean;
+  /**
+   * v5 FARMING CADENCE (per map). Two coupled tweaks to the FARMING bomb decision
+   * (gated to: not pureHunt, no foe engaged — combat behaviour untouched):
+   *  H1 no-waste:  a farming bomb that breaks 0 bricks AND hits no foe is dropped
+   *      (downgraded to the best non-bomb action) — never spend a cannon on nothing.
+   *  H2 pre-place: a PRODUCTIVE farming bomb (breaks >=1 brick, spare cannon free)
+   *      BYPASSES the stochastic `bombChance` throttle, so the bot keeps bombs
+   *      fusing back-to-back instead of randomly skipping ~45% of farm chances.
+   * PIRATE on (the open map turns faster farming tempo straight into a lead: screen
+   * paired +18.8% vs the trapper mirror, gate flat). CLASSIC off (the cramped
+   * lattice punished it — searching/not-wasting bombs herds the bot into the
+   * trapper's vChain seal: screen -15.6% vs trapper). false = committed behaviour.
+   */
+  readonly farmCadence: boolean;
 }

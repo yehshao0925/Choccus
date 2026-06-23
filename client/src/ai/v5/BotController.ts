@@ -2992,12 +2992,49 @@ export class BotController {
 
     // ---- DECIDE THE ACTION -------------------------------------------------
     let bestAction = result.bestAction;
+    // FARMING CADENCE (profile.farmCadence; pirate on, classic off). `inPlaceBricks`
+    // = soft bricks an in-place bomb breaks right now; `foeEngaged`/`scenarios` are
+    // in scope above. Gated on farming context (not pureHunt, no foe engaged) so
+    // combat behaviour is untouched.
+    const farming =
+      profile.farmCadence &&
+      bestAction === RootAction.PLACE_BOMB &&
+      !this.tuning.pureHunt &&
+      !foeEngaged;
+    const spareCannon =
+      myPlayer.activeBombs < myPlayer.cannon &&
+      bombAt(state.bombs, myX, myY) === undefined;
+    // H2 pre-place: a productive farming bomb with a spare cannon bypasses the
+    // bombChance throttle (place it now, keep the cadence going).
+    const productiveFarmBomb = farming && inPlaceBricks > 0 && spareCannon;
     // bombChance throttle (POST-search): if the search wants to bomb but a
     // bombChance roll fails, downgrade to the best non-bomb root action.
-    if (bestAction === RootAction.PLACE_BOMB) {
+    if (bestAction === RootAction.PLACE_BOMB && !productiveFarmBomb) {
       if (this.randFloat() >= this.tuning.bombChance) {
         bestAction = this.bestNonBombAction(perAction);
       }
+    }
+    // H1 no-waste: drop a wasteful farming bomb (no bricks AND hits no foe).
+    if (farming && bestAction === RootAction.PLACE_BOMB && inPlaceBricks === 0) {
+      const bombHitsFoe =
+        this.enemyPressure(
+          state,
+          slot,
+          myTeam,
+          {
+            dir: Direction.NONE,
+            bomb: true,
+            rx: myX,
+            ry: myY,
+            score: 0,
+            survSafe: true,
+            refugeX: -1,
+            refugeY: -1,
+          },
+          myPlayer.fire,
+          scenarios[0]!,
+        ) > 0;
+      if (!bombHitsFoe) bestAction = this.bestNonBombAction(perAction);
     }
 
     // Best survivability-safe non-bomb runner-up (used by the mistake fallback

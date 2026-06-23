@@ -140,4 +140,8 @@ export const CLASSIC_PROFILE: MapProfile = Object.freeze({
   // corridor while a foe is near (the trapper vChain-seal death the v5-trace showed).
   // classic on.
   corridorGate: true,
+  // v5 FARMING CADENCE: OFF for classic. Faster farm tempo (no-waste + skipping the
+  // bombChance throttle) backfires on the cramped lattice — it herds the bot into
+  // the trapper's vChain seal (screen -15.6% vs trapper, gate flat).
+  farmCadence: false,
 });
