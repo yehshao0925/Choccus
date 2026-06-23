@@ -31,11 +31,19 @@ export interface MatchRunnerOptions {
   start: MatchStartMsg;
   /** Slot count = highest occupied slot + 1 at MatchStart (see netMode). */
   numPlayers: number;
+  /** Bot slots + tiers (run locally per client; see LockstepEngine). */
+  bots?: ReadonlyArray<{ slot: number; difficulty: string }>;
   renderer: Renderer;
   /** Long-lived; attached to window for the match, detached on stop(). */
   keyboard: KeyboardInput;
-  /** Fired once when the sim reaches OVER (win/loss for your team, or a draw). */
-  onOver?: (result: 'win' | 'loss' | 'draw', finalState: SimState) => void;
+  /** Fired once when the sim reaches OVER. `winnerTeam` is the absolute winning
+   *  team (= winning slot in FFA), or null for a draw — reported to the relay
+   *  for rating. `result` is that outcome relative to the local player. */
+  onOver?: (
+    result: 'win' | 'loss' | 'draw',
+    finalState: SimState,
+    winnerTeam: number | null,
+  ) => void;
   /** Fired every animation frame. */
   onStatus?: (status: LockstepStatus) => void;
 }
@@ -78,6 +86,7 @@ export class MatchRunner {
       client: opts.client,
       start: opts.start,
       numPlayers: opts.numPlayers,
+      bots: opts.bots,
       // In net mode you control your own player with the arrow keys (WASD
       // also works) and Space to drop a bomb, regardless of assigned slot.
       sampleLocalInput: () => sampleLocalInput(opts.keyboard),
@@ -120,7 +129,7 @@ export class MatchRunner {
           : me !== undefined && winnerTeam === me.team
             ? 'win'
             : 'loss';
-      this.opts.onOver?.(result, next);
+      this.opts.onOver?.(result, next, winnerTeam);
     }
     this.rafId = requestAnimationFrame(this.frame);
   };

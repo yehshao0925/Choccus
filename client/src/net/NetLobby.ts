@@ -36,6 +36,8 @@ export class NetLobby {
   phase: NetLobbyPhase = 'idle';
   /** Latest roster snapshot (null while not in a room). */
   roomState: RoomStateMsg | null = null;
+  /** Persistent rating key sent with every join (set by the orchestrator). */
+  playerId = '';
 
   onPhase?: (phase: NetLobbyPhase) => void;
   onRoomState?: (msg: RoomStateMsg) => void;
@@ -87,7 +89,7 @@ export class NetLobby {
   /** Fire-and-forget join; roomId '' = create a new random-id room. */
   join(roomId: string, name: string): void {
     this.setPhase('joining');
-    this.client.joinRoom(roomId, name);
+    this.client.joinRoom(roomId, name, this.playerId);
   }
 
   /**
@@ -133,6 +135,14 @@ export class NetLobby {
 
   setReady(ready: boolean): void {
     this.client.toggleReady(ready);
+  }
+
+  addBot(slot: number, difficulty: string): void {
+    this.client.addBot(slot, difficulty);
+  }
+
+  removeBot(slot: number): void {
+    this.client.removeBot(slot);
   }
 
   /** Resolves on the next MatchStart; rejects if the socket closes first. */

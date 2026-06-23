@@ -26,6 +26,9 @@ class MsgType(IntEnum):
     READY_TOGGLE = 0x03
     INPUT_FRAME = 0x04
     HASH_REPORT = 0x05
+    ADD_BOT = 0x06
+    REMOVE_BOT = 0x07
+    MATCH_RESULT = 0x08
 
     # Server → Client
     ROOM_STATE = 0x10
@@ -62,9 +65,17 @@ def decode(data: bytes) -> tuple[int, dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def join_room(room_id: str, name: str) -> bytes:
+def join_room(room_id: str, name: str, player_id: str = "") -> bytes:
     """JoinRoomMsg — roomId '' means create a new room."""
-    return encode(MsgType.JOIN_ROOM, {"roomId": room_id, "name": name})
+    return encode(
+        MsgType.JOIN_ROOM,
+        {"roomId": room_id, "name": name, "playerId": player_id},
+    )
+
+
+def match_result(winner_team: int | None) -> bytes:
+    """MatchResultMsg — winning team (= winning slot in FFA), or None for a draw."""
+    return encode(MsgType.MATCH_RESULT, {"winnerTeam": winner_team})
 
 
 def leave_room() -> bytes:
@@ -73,6 +84,14 @@ def leave_room() -> bytes:
 
 def ready_toggle(ready: bool) -> bytes:
     return encode(MsgType.READY_TOGGLE, {"ready": ready})
+
+
+def add_bot(slot: int, difficulty: str = "normal") -> bytes:
+    return encode(MsgType.ADD_BOT, {"slot": slot, "difficulty": difficulty})
+
+
+def remove_bot(slot: int) -> bytes:
+    return encode(MsgType.REMOVE_BOT, {"slot": slot})
 
 
 def input_frame(t: int, dirs: int, actions: int) -> bytes:
@@ -91,7 +110,7 @@ def hash_report(t: int, hash_: int) -> bytes:
 def room_state(
     room_id: str, phase: int, you_slot: int, players: list[dict[str, Any]]
 ) -> bytes:
-    """RoomStateMsg — players: [{slot, name, ready, connected}], youSlot per receiver."""
+    """RoomStateMsg — players: [{slot, name, ready, connected, isBot, botDifficulty, score}], youSlot per receiver."""
     return encode(
         MsgType.ROOM_STATE,
         {"roomId": room_id, "phase": phase, "youSlot": you_slot, "players": players},

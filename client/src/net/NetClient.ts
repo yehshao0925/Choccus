@@ -16,11 +16,14 @@
  */
 import {
   MsgType,
+  buildAddBot,
   buildHashReport,
   buildInputFrame,
   buildJoinRoom,
   buildLeaveRoom,
+  buildMatchResult,
   buildReadyToggle,
+  buildRemoveBot,
   decodeServerMsg,
 } from './protocolCodec';
 import type { ServerMsg } from './protocolCodec';
@@ -225,8 +228,12 @@ export class NetClient {
   // -- typed senders ------------------------------------------------------------
 
   /** roomId '' = create a new room. */
-  joinRoom(roomId: string, name: string): void {
-    this.send(buildJoinRoom(roomId, name));
+  joinRoom(roomId: string, name: string, playerId: string): void {
+    this.send(buildJoinRoom(roomId, name, playerId));
+  }
+
+  reportResult(winnerTeam: number | null): void {
+    this.send(buildMatchResult(winnerTeam));
   }
 
   leaveRoom(): void {
@@ -235,6 +242,14 @@ export class NetClient {
 
   toggleReady(ready: boolean): void {
     this.send(buildReadyToggle(ready));
+  }
+
+  addBot(slot: number, difficulty: string): void {
+    this.send(buildAddBot(slot, difficulty));
+  }
+
+  removeBot(slot: number): void {
+    this.send(buildRemoveBot(slot));
   }
 
   sendInput(t: number, dirs: number, actions: number): void {
