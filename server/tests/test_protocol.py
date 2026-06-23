@@ -48,16 +48,16 @@ def test_msg_type_ids_match_protocol_ts():
 
 
 def test_join_room():
-    assert roundtrip(protocol.join_room("AB2CD", "alice")) == (
+    assert roundtrip(protocol.join_room("AB2CD", "alice", "pid-1")) == (
         MsgType.JOIN_ROOM,
-        {"roomId": "AB2CD", "name": "alice"},
+        {"roomId": "AB2CD", "name": "alice", "playerId": "pid-1"},
     )
 
 
 def test_join_room_create():
     assert roundtrip(protocol.join_room("", "bob")) == (
         MsgType.JOIN_ROOM,
-        {"roomId": "", "name": "bob"},
+        {"roomId": "", "name": "bob", "playerId": ""},
     )
 
 

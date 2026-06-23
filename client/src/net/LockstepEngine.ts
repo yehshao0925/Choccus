@@ -39,6 +39,8 @@ import {
   INPUT_DELAY_TICKS,
   TICK_MS,
 } from '../../../shared/constants';
+import { AI_VERSIONS, type BotSpec, type IBotController } from '../ai/index';
+import { asTier, botForTier } from '../ai/botDifficulty';
 import { type FeelParams, makeFeelParams } from '../config/FeelParams';
 import { type InputFrame, NO_INPUT } from '../sim/InputBuffer';
 import { spawnOrderFromSeed } from '../sim/Map';
@@ -68,6 +70,15 @@ export interface LockstepEngineOptions {
   numPlayers: number;
   /** Sample the LOCAL player's raw input for the given target sim tick. */
   sampleLocalInput: (forTick: number) => InputFrame;
+  /**
+   * Slots filled by AI bots (from the RoomState roster), each with its chosen
+   * strength tier. Bots have no socket — every client runs them locally and
+   * deterministically: createBot(seed, slot, …) + the byte-identical lockstep
+   * state guarantee an identical input sequence on every client, so no bot data
+   * crosses the wire and the relay never waits on these slots. The tier maps to
+   * the same BT rung on every client (botDifficulty.ts).
+   */
+  bots?: ReadonlyArray<{ slot: number; difficulty: string }>;
   /** Fired after every advanced tick with the post-tick uint32 hash. */
   onTick?: (tickNo: number, hash: number) => void;
 }
@@ -106,6 +117,10 @@ export class LockstepEngine {
   /** tick → slot → wire input. Pre-seeded for the warmup window. */
   private readonly pendingInputs = new Map<number, Map<number, SlotInput>>();
 
+  /** Bot brains for the bot slots; their input is computed locally per tick. */
+  private readonly botSlots: Set<number>;
+  private readonly bots = new Map<number, IBotController>();
+
   private acc = 0;
   private blocked = false;
   private desynced = false;
@@ -141,6 +156,21 @@ export class LockstepEngine {
     this.currentTick = opts.start.t0;
     this.nextSendTick = opts.start.t0 + INPUT_DELAY_TICKS;
 
+    // Build a bot brain per bot slot from its chosen tier. The tier → BT rung
+    // (version, archetype) mapping is identical on every client for the rolled
+    // map + seed, so every client builds the same bot → no desync, no bot data
+    // on the wire. Strength = which archetype (played at full strength), so
+    // strategyRaw carries the archetype and difficulty stays 'champion'.
+    this.botSlots = new Set((opts.bots ?? []).map((b) => b.slot));
+    for (const { slot, difficulty } of opts.bots ?? []) {
+      const rung = botForTier(asTier(difficulty), this.curState.mapKind);
+      const module = AI_VERSIONS[rung.version];
+      if (module !== undefined) {
+        const spec: BotSpec = { difficulty: 'champion', strategyRaw: rung.archetype };
+        this.bots.set(slot, module.createBot(opts.start.seed, slot, spec));
+      }
+    }
+
     // Lockstep warmup: the first INPUT_DELAY_TICKS ticks run on NO_INPUT for
     // every slot (the relay only ever relays ticks >= t0 + INPUT_DELAY_TICKS).
     for (let t = opts.start.t0; t < opts.start.t0 + INPUT_DELAY_TICKS; t++) {
@@ -157,6 +187,9 @@ export class LockstepEngine {
         const bySlot =
           this.pendingInputs.get(m.t) ?? new Map<number, SlotInput>();
         for (let slot = 0; slot < m.inputs.length; slot++) {
+          // Bot slots carry neutral filler in the broadcast — ignore it; the
+          // bot's real input is computed locally in tryAdvanceTick().
+          if (this.botSlots.has(slot)) continue;
           const input = m.inputs[slot];
           if (input !== undefined) bySlot.set(slot, input);
         }
@@ -219,6 +252,24 @@ export class LockstepEngine {
       bySlot.set(this.mySlot, { dirs: frame.dir, actions: frame.action });
       this.client.sendInput(this.nextSendTick, frame.dir, frame.action);
       this.nextSendTick += 1;
+    }
+
+    // Fill bot slots locally from the current (byte-identical) state. Each bot
+    // is sampled exactly once per tick (guarded by has()), so its internal RNG
+    // advances identically on every client → no desync. Warmup ticks already
+    // hold NO_INPUT for bot slots, so bots first act at t0 + INPUT_DELAY_TICKS.
+    if (this.bots.size > 0) {
+      let bots = this.pendingInputs.get(t);
+      if (bots === undefined) {
+        bots = new Map<number, SlotInput>();
+        this.pendingInputs.set(t, bots);
+      }
+      for (const [slot, bot] of this.bots) {
+        if (!bots.has(slot)) {
+          const f = bot.sample(this.curState, slot);
+          bots.set(slot, { dirs: f.dir, actions: f.action });
+        }
+      }
     }
 
     const bySlot = this.pendingInputs.get(t);

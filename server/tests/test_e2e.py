@@ -25,7 +25,7 @@ async def recv_until(ws, type_id: int, timeout: float = 2.0) -> dict:
 
 
 async def with_server(test_body):
-    relay = RelayServer()
+    relay = RelayServer(db_path=":memory:")
     async with serve(relay.handler, "localhost", 0) as server:
         port = server.sockets[0].getsockname()[1]
         await test_body(f"ws://localhost:{port}")
@@ -41,7 +41,13 @@ def test_two_clients_join_ready_matchstart_and_tick_relay():
             assert state_a["youSlot"] == 0
             assert state_a["phase"] == 0
             assert state_a["players"] == [
-                {"slot": 0, "name": "alice", "ready": False, "connected": True}
+                {
+                    "slot": 0,
+                    "name": "alice",
+                    "ready": False,
+                    "connected": True,
+                    "score": 0.0,
+                }
             ]
 
             # B joins by id; both get the updated roster.

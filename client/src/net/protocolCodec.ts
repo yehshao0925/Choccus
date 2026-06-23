@@ -79,8 +79,17 @@ export function decodeMsg(data: Uint8Array): {
 // ---------------------------------------------------------------------------
 
 /** JoinRoomMsg — roomId '' means create a new room. */
-export function buildJoinRoom(roomId: string, name: string): Uint8Array {
-  return encodeMsg(MsgType.JOIN_ROOM, { roomId, name });
+export function buildJoinRoom(
+  roomId: string,
+  name: string,
+  playerId: string,
+): Uint8Array {
+  return encodeMsg(MsgType.JOIN_ROOM, { roomId, name, playerId });
+}
+
+/** MatchResultMsg — winning team (= winning slot in FFA), or null for a draw. */
+export function buildMatchResult(winnerTeam: number | null): Uint8Array {
+  return encodeMsg(MsgType.MATCH_RESULT, { winnerTeam });
 }
 
 export function buildLeaveRoom(): Uint8Array {
@@ -89,6 +98,14 @@ export function buildLeaveRoom(): Uint8Array {
 
 export function buildReadyToggle(ready: boolean): Uint8Array {
   return encodeMsg(MsgType.READY_TOGGLE, { ready });
+}
+
+export function buildAddBot(slot: number, difficulty: string): Uint8Array {
+  return encodeMsg(MsgType.ADD_BOT, { slot, difficulty });
+}
+
+export function buildRemoveBot(slot: number): Uint8Array {
+  return encodeMsg(MsgType.REMOVE_BOT, { slot });
 }
 
 export function buildInputFrame(

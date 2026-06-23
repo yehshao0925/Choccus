@@ -34,12 +34,19 @@ class TickCoordinator:
         slots: Iterable[int],
         broadcast: Callable[[bytes], None],
         *,
+        bots: Iterable[int] = (),
         first_tick: int = INPUT_DELAY_TICKS,
         stall_timeout_ms: float = STALL_TIMEOUT_MS,
         history_size: int = INPUT_HISTORY_SIZE,
     ) -> None:
         self.slots = frozenset(slots)  # slots baked into the match, never change
-        self.connected: set[int] = set(self.slots)
+        # Bot slots occupy a slot (so the InputBroadcast width covers them, and
+        # clients fill them with locally-computed deterministic input) but are
+        # NEVER waited on: they never send a socket frame. Same effect as a
+        # permanently-disconnected slot, except clients substitute bot input
+        # instead of neutral ghost input.
+        self.bots = frozenset(bots)
+        self.connected: set[int] = set(self.slots) - self.bots
         self.broadcast = broadcast
         self.next_tick = first_tick
         #: t -> slot -> (dirs, actions); only keys >= next_tick are kept.

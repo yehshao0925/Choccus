@@ -10,23 +10,46 @@
  *   result        post-match Victory/Defeat panel, Rematch / Back to room;
  *   matchNotice   small in-match banner (player disconnected, stall, desync).
  *
- * All visuals are original (plain DOM, chocolate palette) — no copyrighted
- * assets, per the clean-room rules in CLAUDE.md.
+ * Visual language = the "milk-cream" (牛奶奶油) candy world shared with the
+ * arena (render/candyArt.ts): cream panels, Baloo 2 / Nunito fonts, and the
+ * SAME chef-hat blob characters (playerHtml) in the roster cards — so the
+ * lobby and the match read as one game, not two. All original assets per the
+ * clean-room rules in CLAUDE.md.
  */
+import { playerHtml, TW } from '../render/candyArt';
 import { sfx } from '../audio/Sfx';
-import type { RoomStateMsg } from './protocolCodec';
+import type { RoomStateMsg, RoomPlayer } from './protocolCodec';
 
+const FONT = "'Nunito',system-ui,sans-serif";
+const FONT_HEAD = "'Baloo 2',system-ui,sans-serif";
+
+// Milk-cream candy palette — aligned with candyArt.ts MILK / TEAM_PALETTE.
 const PALETTE = {
-  card: 'rgba(46, 26, 12, 0.96)', // dark chocolate
-  text: '#f5e6d3',
-  accent: '#ffb74d',
-  soft: '#cfb497',
-  button: '#6b3f1d',
-  buttonHover: '#8a5527',
-  primary: '#c87f33',
-  danger: '#a3402e',
-  input: '#241308',
+  card: 'linear-gradient(180deg,#FFFDF8,#FFF3DC)', // cream panel
+  cardBorder: 'rgba(214,170,110,0.45)',
+  text: '#5B3B1E', // deep cocoa
+  soft: '#9A7B53', // muted caramel
+  accent: '#7A4A2B', // heading ink
+  mint: '#4FAF94', // ready / positive
+  mintBg: 'rgba(127,209,185,0.22)',
+  button: '#F2DFBC', // soft cream button
+  buttonInk: '#7A4A2B',
+  primary: 'linear-gradient(180deg,#F2B765,#E8A24A)', // caramel CTA
+  danger: '#D85F7C', // strawberry
+  input: '#FFFDF8',
+  inputBorder: 'rgba(201,156,99,0.55)',
 };
+
+// Avatar geometry: candyArt draws the blob around the tile-centre origin (CX).
+const AV_CX = TW / 2; // 24
+
+// One slot per spawn corner of the 15x13 map (= sim Map.SPAWN_CORNERS.length).
+const ROOM_SLOTS = 4;
+
+/** Display label for a bot strength tier. */
+function tierLabel(tier: string | undefined): string {
+  return tier === 'easy' ? 'Easy' : tier === 'hard' ? 'Hard' : 'Normal';
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -49,9 +72,10 @@ function card(parent: HTMLElement): HTMLDivElement {
       'padding:24px 28px',
       `background:${PALETTE.card}`,
       `color:${PALETTE.text}`,
-      'font:14px/1.5 system-ui,sans-serif',
-      'border-radius:14px',
-      'box-shadow:0 8px 28px rgba(43,26,14,0.45)',
+      `font:600 14px/1.5 ${FONT}`,
+      `border:2px solid ${PALETTE.cardBorder}`,
+      'border-radius:20px',
+      'box-shadow:0 14px 36px rgba(150,108,58,0.22),inset 0 2px 4px rgba(255,255,255,0.8)',
     ].join(';'),
     parent,
   );
@@ -60,7 +84,7 @@ function card(parent: HTMLElement): HTMLDivElement {
 function heading(parent: HTMLElement, text: string): HTMLDivElement {
   const h = el(
     'div',
-    `font-size:20px;font-weight:bold;color:${PALETTE.accent};margin-bottom:14px;`,
+    `font:800 22px ${FONT_HEAD};color:${PALETTE.accent};margin-bottom:14px;`,
     parent,
   );
   h.textContent = text;
@@ -77,19 +101,23 @@ function button(
     [
       'display:inline-block',
       'margin:4px 8px 4px 0',
-      'padding:8px 16px',
+      'padding:9px 18px',
       `background:${bg}`,
-      `color:${PALETTE.text}`,
-      'font:14px system-ui,sans-serif',
+      `color:${PALETTE.buttonInk}`,
+      `font:700 14px ${FONT_HEAD}`,
       'border:none',
-      'border-radius:8px',
+      'border-radius:12px',
       'cursor:pointer',
+      'box-shadow:0 3px 0 rgba(150,108,58,0.28),inset 0 1px 1px rgba(255,255,255,0.7)',
+      'transition:filter .12s,transform .06s',
     ].join(';'),
     parent,
   );
   b.textContent = label;
-  b.addEventListener('mouseenter', () => (b.style.filter = 'brightness(1.2)'));
+  b.addEventListener('mouseenter', () => (b.style.filter = 'brightness(1.06)'));
   b.addEventListener('mouseleave', () => (b.style.filter = ''));
+  b.addEventListener('mousedown', () => (b.style.transform = 'translateY(1px)'));
+  b.addEventListener('mouseup', () => (b.style.transform = ''));
   return b;
 }
 
@@ -101,12 +129,12 @@ function input(parent: HTMLElement, placeholder: string): HTMLInputElement {
       'width:100%',
       'box-sizing:border-box',
       'margin:4px 0 12px',
-      'padding:8px 10px',
+      'padding:9px 12px',
       `background:${PALETTE.input}`,
       `color:${PALETTE.text}`,
-      'font:14px system-ui,sans-serif',
-      `border:1px solid ${PALETTE.button}`,
-      'border-radius:8px',
+      `font:600 14px ${FONT}`,
+      `border:2px solid ${PALETTE.inputBorder}`,
+      'border-radius:10px',
       'outline:none',
     ].join(';'),
     parent,
@@ -116,7 +144,7 @@ function input(parent: HTMLElement, placeholder: string): HTMLInputElement {
 }
 
 function label(parent: HTMLElement, text: string): void {
-  const l = el('div', `font-size:12px;color:${PALETTE.soft};`, parent);
+  const l = el('div', `font:600 12px ${FONT};color:${PALETTE.soft};`, parent);
   l.textContent = text;
 }
 
@@ -128,6 +156,8 @@ export class LobbyUI {
   onJoinRoom?: (name: string, roomId: string) => void;
   onQuickMatch?: (name: string) => void;
   onReadyToggle?: (ready: boolean) => void;
+  onAddBot?: (slot: number, difficulty: string) => void;
+  onRemoveBot?: (slot: number) => void;
   onLeaveRoom?: () => void;
   onRematch?: () => void;
   onBackToRoom?: () => void;
@@ -154,6 +184,9 @@ export class LobbyUI {
   private readonly readyBtn: HTMLButtonElement;
   private localReady = false;
   private currentRoomId = '';
+  /** DDA-suggested bot tier; pre-selects empty-seat pickers. */
+  private suggestedBotTier = 'normal';
+  private lastRoomState: RoomStateMsg | null = null;
 
   // -- disconnected ---------------------------------------------------------------
   private readonly discScreen: HTMLDivElement;
@@ -183,22 +216,22 @@ export class LobbyUI {
         'padding:32px 34px 28px',
         `background:${PALETTE.card}`,
         `color:${PALETTE.text}`,
-        'font:14px/1.5 system-ui,sans-serif',
-        'border-radius:18px',
-        'box-shadow:0 12px 40px rgba(43,26,14,0.55),0 2px 8px rgba(43,26,14,0.3)',
+        `font:600 14px/1.5 ${FONT}`,
+        `border:2px solid ${PALETTE.cardBorder}`,
+        'border-radius:24px',
+        'box-shadow:0 18px 48px rgba(150,108,58,0.28),inset 0 2px 5px rgba(255,255,255,0.85)',
       ].join(';'),
       this.root,
     );
 
-    // Big game-title with chocolate gradient.
+    // Big game-title with caramel gradient (Baloo 2, like the arena HUD).
     const titleEl = el(
       'div',
       [
-        'font-size:38px',
-        'font-weight:900',
-        'letter-spacing:-1px',
+        `font:800 40px ${FONT_HEAD}`,
+        'letter-spacing:-0.5px',
         'margin-bottom:2px',
-        'background:linear-gradient(135deg,#FFD700 0%,#F4A460 30%,#D2691E 55%,#8B4513 80%,#3d1c02 100%)',
+        'background:linear-gradient(135deg,#F2B765 0%,#E8A24A 42%,#C57E25 72%,#7A4A2B 100%)',
         '-webkit-background-clip:text',
         '-webkit-text-fill-color:transparent',
         'background-clip:text',
@@ -211,7 +244,7 @@ export class LobbyUI {
     // Tagline.
     const taglineEl = el(
       'div',
-      `font-size:13px;letter-spacing:2px;color:${PALETTE.soft};margin-bottom:20px;text-transform:uppercase;`,
+      `font:700 13px ${FONT};letter-spacing:2px;color:${PALETTE.soft};margin-bottom:20px;text-transform:uppercase;`,
       this.landing,
     );
     taglineEl.textContent = 'Place. Melt. Escape.';
@@ -219,7 +252,7 @@ export class LobbyUI {
     // Divider.
     el(
       'div',
-      `height:1px;background:linear-gradient(90deg,transparent,${PALETTE.button},transparent);margin-bottom:18px;`,
+      `height:2px;background:linear-gradient(90deg,transparent,${PALETTE.cardBorder},transparent);margin-bottom:18px;`,
       this.landing,
     );
 
@@ -241,11 +274,11 @@ export class LobbyUI {
     );
     this.landingStatus = el(
       'div',
-      `margin-top:12px;min-height:18px;font-size:13px;color:${PALETTE.soft};`,
+      `margin-top:12px;min-height:18px;font:600 13px ${FONT};color:${PALETTE.soft};`,
       this.landing,
     );
 
-    // Offline single-player practice (vs the lantern spirits).
+    // Offline single-player practice.
     const soloRow = el('div', 'margin-top:4px;', this.landing);
     button(soloRow, '🍫 Solo Practice').addEventListener('click', () =>
       this.onSolo?.(),
@@ -256,13 +289,14 @@ export class LobbyUI {
     this.soundToggleBtn = el(
       'button',
       [
-        'padding:5px 12px',
+        'padding:6px 14px',
         `background:${PALETTE.button}`,
-        `color:${PALETTE.text}`,
+        `color:${PALETTE.buttonInk}`,
         'border:none',
-        'border-radius:8px',
-        'font:12px system-ui,sans-serif',
+        'border-radius:10px',
+        `font:700 12px ${FONT_HEAD}`,
         'cursor:pointer',
+        'box-shadow:0 2px 0 rgba(150,108,58,0.28)',
       ].join(';'),
       soundRow,
     );
@@ -275,7 +309,7 @@ export class LobbyUI {
     });
     this.soundHintEl = el(
       'span',
-      `font-size:11px;color:${PALETTE.soft};opacity:0.85;`,
+      `font:600 11px ${FONT};color:${PALETTE.soft};opacity:0.85;`,
       soundRow,
     );
     this.soundHintEl.textContent = 'Click anywhere to enable sound';
@@ -287,23 +321,21 @@ export class LobbyUI {
 
     // --- room ---
     this.roomScreen = card(this.root);
+    this.roomScreen.style.minWidth = '380px';
+    this.roomScreen.style.maxWidth = '460px';
     heading(this.roomScreen, 'Room');
-    const codeRow = el('div', 'margin:-6px 0 12px;', this.roomScreen);
+    const codeRow = el('div', 'margin:-6px 0 14px;display:flex;align-items:center;', this.roomScreen);
     this.roomCode = el(
       'span',
-      `font:bold 26px ui-monospace,Menlo,monospace;letter-spacing:3px;color:${PALETTE.accent};margin-right:12px;`,
+      `font:800 26px ${FONT_HEAD};letter-spacing:3px;color:${PALETTE.accent};margin-right:12px;`,
       codeRow,
     );
     this.copyBtn = button(codeRow, 'Copy invite link');
     this.copyBtn.addEventListener('click', () => this.copyInviteLink());
-    this.rosterEl = el(
-      'div',
-      'font:13px/1.7 ui-monospace,Menlo,monospace;margin-bottom:10px;',
-      this.roomScreen,
-    );
+    this.rosterEl = el('div', 'margin-bottom:10px;', this.roomScreen);
     this.roomStatus = el(
       'div',
-      `min-height:18px;font-size:13px;color:${PALETTE.soft};margin-bottom:10px;`,
+      `min-height:18px;font:600 13px ${FONT};color:${PALETTE.soft};margin-bottom:10px;`,
       this.roomScreen,
     );
     this.readyBtn = button(this.roomScreen, 'Ready', PALETTE.primary);
@@ -332,18 +364,19 @@ export class LobbyUI {
         'transform:translate(-50%,-50%)',
         'z-index:1200',
         'min-width:300px',
-        'padding:22px 26px',
+        'padding:24px 28px',
         `background:${PALETTE.card}`,
         `color:${PALETTE.text}`,
-        'font:14px/1.5 system-ui,sans-serif',
-        'border-radius:14px',
-        'box-shadow:0 8px 28px rgba(43,26,14,0.55)',
+        `font:600 14px/1.5 ${FONT}`,
+        `border:2px solid ${PALETTE.cardBorder}`,
+        'border-radius:20px',
+        'box-shadow:0 16px 44px rgba(150,108,58,0.3),inset 0 2px 5px rgba(255,255,255,0.85)',
         'text-align:center',
       ].join(';'),
     );
     this.resultTitle = el(
       'div',
-      `font-size:24px;font-weight:bold;color:${PALETTE.accent};margin-bottom:6px;`,
+      `font:800 26px ${FONT_HEAD};color:${PALETTE.accent};margin-bottom:6px;`,
       this.resultPanel,
     );
     this.resultDetail = el('div', 'margin-bottom:12px;', this.resultPanel);
@@ -356,7 +389,7 @@ export class LobbyUI {
     );
     this.resultStatus = el(
       'div',
-      `margin-top:10px;min-height:18px;font-size:13px;color:${PALETTE.soft};`,
+      `margin-top:10px;min-height:18px;font:600 13px ${FONT};color:${PALETTE.soft};`,
       this.resultPanel,
     );
     document.body.appendChild(this.resultPanel);
@@ -371,12 +404,12 @@ export class LobbyUI {
         'left:50%',
         'transform:translateX(-50%)',
         'z-index:1100',
-        'padding:6px 14px',
+        'padding:7px 16px',
         `background:${PALETTE.danger}`,
-        `color:${PALETTE.text}`,
-        'font:13px system-ui,sans-serif',
+        'color:#FFF',
+        `font:700 13px ${FONT_HEAD}`,
         'border-radius:999px',
-        'box-shadow:0 4px 14px rgba(43,26,14,0.4)',
+        'box-shadow:0 4px 14px rgba(216,95,124,0.45)',
       ].join(';'),
     );
     document.body.appendChild(this.noticeEl);
@@ -390,6 +423,15 @@ export class LobbyUI {
 
   setRoomId(roomId: string): void {
     this.roomInput.value = roomId;
+  }
+
+  /** Pre-select this tier in empty-seat "+ Bot" pickers (from local DDA). */
+  setSuggestedTier(tier: string): void {
+    this.suggestedBotTier = tier;
+    // Re-render the room so empty seats pick up the new default.
+    if (this.roomScreen.style.display !== 'none' && this.lastRoomState !== null) {
+      this.showRoom(this.lastRoomState);
+    }
   }
 
   private nameValue(): string {
@@ -414,21 +456,18 @@ export class LobbyUI {
   /** Show/refresh the room view from a RoomState snapshot. */
   showRoom(state: RoomStateMsg): void {
     this.showOnly(this.roomScreen);
+    this.lastRoomState = state;
     this.currentRoomId = state.roomId;
     this.roomCode.textContent = state.roomId;
 
+    // Always render all 4 slots: occupied ones show the player/bot card, empty
+    // ones offer "+ Bot".
     this.rosterEl.textContent = '';
-    for (const p of state.players) {
-      const line = el('div', '', this.rosterEl);
-      const you = p.slot === state.youSlot ? ' (you)' : '';
-      const status = !p.connected
-        ? 'disconnected'
-        : p.ready
-          ? 'READY'
-          : 'not ready';
-      line.textContent = `P${p.slot + 1}  ${p.name || '(unnamed)'}${you} — ${status}`;
-      line.style.color =
-        p.connected && p.ready ? PALETTE.accent : PALETTE.text;
+    for (let slot = 0; slot < ROOM_SLOTS; slot++) {
+      const p = state.players.find((q) => q.slot === slot);
+      this.rosterEl.appendChild(
+        p === undefined ? this.emptySlotCard(slot) : this.rosterCard(p, state.youSlot),
+      );
     }
 
     this.localReady =
@@ -445,6 +484,150 @@ export class LobbyUI {
         : present.every((p) => p.ready)
           ? 'Everyone ready — starting…'
           : 'Waiting for everyone to ready up…';
+  }
+
+  /** A slot row shell shared by player/bot/empty cards. */
+  private slotRow(bg: string, border: string): HTMLDivElement {
+    return el(
+      'div',
+      [
+        'display:flex',
+        'align-items:center',
+        'gap:12px',
+        'padding:6px 12px 6px 8px',
+        'margin-bottom:8px',
+        'border-radius:16px',
+        `background:${bg}`,
+        `border:2px solid ${border}`,
+      ].join(';'),
+    );
+  }
+
+  /** A candy-blob avatar (chef-hat cutie for humans, robot-chef for bots). */
+  private avatar(slot: number, isBot: boolean, dim: boolean): HTMLDivElement {
+    const av = el('div', 'position:relative;width:50px;height:58px;flex:0 0 auto;', undefined);
+    if (dim) {
+      av.style.opacity = '0.4';
+      av.style.filter = 'grayscale(0.6)';
+    }
+    const o = el('div', `position:absolute;left:${25 - AV_CX}px;top:36px;`, av);
+    o.innerHTML = playerHtml(slot, isBot, 0, 0);
+    return av;
+  }
+
+  /** One roster row = chef-hat cutie (human) or robot-chef (bot) + name + pill. */
+  private rosterCard(p: RoomPlayer, youSlot: number): HTMLDivElement {
+    const you = p.slot === youSlot;
+    const ready = p.connected && p.ready;
+    const row = this.slotRow(
+      ready ? PALETTE.mintBg : 'rgba(255,255,255,0.5)',
+      ready ? 'rgba(127,209,185,0.7)' : 'rgba(214,170,110,0.35)',
+    );
+
+    row.appendChild(this.avatar(p.slot, p.isBot ?? false, !p.connected));
+
+    // Name + slot.
+    const col = el('div', 'flex:1 1 auto;min-width:0;', row);
+    const nm = el(
+      'div',
+      `font:700 16px ${FONT_HEAD};color:${PALETTE.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`,
+      col,
+    );
+    nm.textContent = (p.name || '(unnamed)') + (you ? '（你）' : '');
+    const meta = el('div', `font:600 12px ${FONT};color:${PALETTE.soft};`, col);
+    meta.textContent =
+      `P${p.slot + 1}` +
+      (p.score !== undefined && p.score !== null ? `  ·  ★ ${Math.round(p.score)}` : '');
+
+    if (p.isBot) {
+      // Bots: BOT · <tier> badge + a remove (✕) button (anyone may remove).
+      const badge = el(
+        'div',
+        `flex:0 0 auto;padding:4px 12px;border-radius:999px;font:700 12px ${FONT_HEAD};` +
+          `background:rgba(143,168,232,0.25);color:#5566b0;`,
+        row,
+      );
+      badge.textContent = `BOT · ${tierLabel(p.botDifficulty)}`;
+      const x = el(
+        'button',
+        'flex:0 0 auto;width:26px;height:26px;border:none;border-radius:50%;cursor:pointer;' +
+          `background:rgba(216,95,124,0.15);color:${PALETTE.danger};font:700 14px ${FONT_HEAD};`,
+        row,
+      );
+      x.textContent = '✕';
+      x.title = 'Remove bot';
+      x.addEventListener('click', () => this.onRemoveBot?.(p.slot));
+      return row;
+    }
+
+    // Humans: status pill.
+    const pill = el(
+      'div',
+      [
+        'flex:0 0 auto',
+        'padding:4px 12px',
+        'border-radius:999px',
+        `font:700 12px ${FONT_HEAD}`,
+        !p.connected
+          ? `background:rgba(154,123,83,0.18);color:${PALETTE.soft}`
+          : p.ready
+            ? `background:rgba(127,209,185,0.32);color:${PALETTE.mint}`
+            : `background:rgba(232,162,74,0.2);color:${PALETTE.accent}`,
+      ].join(';'),
+      row,
+    );
+    pill.textContent = !p.connected ? '離線' : p.ready ? '已準備' : '準備中…';
+    return row;
+  }
+
+  /** Empty slot = dashed placeholder with a "+ Bot" button. */
+  private emptySlotCard(slot: number): HTMLDivElement {
+    const row = this.slotRow('rgba(255,255,255,0.25)', 'rgba(214,170,110,0.3)');
+    row.style.borderStyle = 'dashed';
+
+    // Faint slot ghost so the 4-up grid reads as fixed seats.
+    const ghost = el('div', 'width:50px;height:58px;flex:0 0 auto;', row);
+    ghost.style.display = 'flex';
+    ghost.style.alignItems = 'center';
+    ghost.style.justifyContent = 'center';
+    ghost.style.font = `700 22px ${FONT_HEAD}`;
+    ghost.style.color = 'rgba(154,123,83,0.4)';
+    ghost.textContent = `P${slot + 1}`;
+
+    const col = el('div', 'flex:1 1 auto;min-width:0;', row);
+    el(
+      'div',
+      `font:700 15px ${FONT_HEAD};color:${PALETTE.soft};`,
+      col,
+    ).textContent = 'Empty seat';
+
+    // Tier picker (native select) defaulting to the DDA-suggested tier.
+    const tierSel = el(
+      'select',
+      'flex:0 0 auto;padding:6px 8px;border-radius:10px;cursor:pointer;' +
+        `background:${PALETTE.input};color:${PALETTE.text};font:700 12px ${FONT_HEAD};` +
+        `border:2px solid ${PALETTE.inputBorder};outline:none;`,
+      row,
+    );
+    for (const t of ['easy', 'normal', 'hard']) {
+      const opt = el('option', '', tierSel);
+      opt.value = t;
+      opt.textContent = tierLabel(t);
+    }
+    tierSel.value = ['easy', 'normal', 'hard'].includes(this.suggestedBotTier)
+      ? this.suggestedBotTier
+      : 'normal';
+
+    const addBtn = el(
+      'button',
+      'flex:0 0 auto;padding:7px 14px;border:none;border-radius:12px;cursor:pointer;' +
+        `background:${PALETTE.button};color:${PALETTE.buttonInk};font:700 13px ${FONT_HEAD};` +
+        'box-shadow:0 2px 0 rgba(150,108,58,0.28);',
+      row,
+    );
+    addBtn.textContent = '＋ Bot';
+    addBtn.addEventListener('click', () => this.onAddBot?.(slot, tierSel.value));
+    return row;
   }
 
   showDisconnected(message: string, showRetry: boolean): void {
@@ -474,7 +657,8 @@ export class LobbyUI {
     this.resultPanel.style.display = 'block';
     this.resultTitle.textContent =
       result === 'win' ? 'Victory!' : result === 'draw' ? 'Draw' : 'Defeat';
-    this.resultTitle.style.color = result === 'win' ? PALETTE.accent : PALETTE.soft;
+    this.resultTitle.style.color =
+      result === 'win' ? PALETTE.mint : result === 'loss' ? PALETTE.danger : PALETTE.soft;
     this.resultDetail.textContent = detail;
     this.resultStatus.textContent = '';
   }

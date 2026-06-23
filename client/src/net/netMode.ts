@@ -32,6 +32,8 @@ import { MatchRunner } from './MatchRunner';
 import { NetClient } from './NetClient';
 import { NetDebugOverlay } from './NetDebugOverlay';
 import { NetLobby } from './NetLobby';
+import { recordBotResult, suggestedTier } from './dda';
+import { getPlayerId } from './identity';
 import { resolveWsUrl } from './wsUrl';
 import type { LockstepStatus } from './LockstepEngine';
 import type { MatchStartMsg, RoomPlayer, RoomStateMsg } from './protocolCodec';
@@ -59,6 +61,7 @@ export async function runNetMode(params: URLSearchParams): Promise<void> {
   const client = new NetClient();
   client.enableAutoReconnect();
   const lobby = new NetLobby(client);
+  lobby.playerId = getPlayerId(); // persistent rating key, sent with every join
   const keyboard = new KeyboardInput(); // attached only while a match runs
 
   const ui = new LobbyUI();
@@ -104,6 +107,8 @@ export async function runNetMode(params: URLSearchParams): Promise<void> {
   let rosterAtStart: RoomPlayer[] = [];
   let everConnected = false;
   let lastRoomId = roomParam;
+  /** Whether the in-progress match includes bots (drives the DDA update). */
+  let matchHadBots = false;
 
   const errText = (err: unknown): string =>
     err instanceof Error ? err.message : String(err);
@@ -148,13 +153,19 @@ export async function runNetMode(params: URLSearchParams): Promise<void> {
     rosterAtStart = lobby.roomState?.players ?? [];
     const numPlayers =
       Math.max(start.slot, ...rosterAtStart.map((p) => p.slot)) + 1;
+    // Bots come from the final roster (isBot + botDifficulty). The roster is
+    // identical on every client at MatchStart, so every client runs the same
+    // bots → no desync. They render as robot-chefs (humans as chef-hat cuties).
+    const bots = rosterAtStart
+      .filter((p) => p.isBot)
+      .map((p) => ({ slot: p.slot, difficulty: p.botDifficulty ?? 'normal' }));
+    matchHadBots = bots.length > 0;
 
     if (renderer === null) {
       renderer = await Renderer.create();
-      // Online play is human-vs-human: nobody renders as a robot-chef.
-      renderer.setBotSlots(new Set());
       mount?.appendChild(renderer.canvas);
     }
+    renderer.setBotSlots(new Set(bots.map((b) => b.slot)));
     renderer.setHudHint(
       `Online — you are P${start.slot + 1} · Arrows + Space`,
       false,
@@ -169,11 +180,18 @@ export async function runNetMode(params: URLSearchParams): Promise<void> {
       client,
       start,
       numPlayers,
+      bots,
       renderer,
       keyboard,
       onStatus: (s) => updateMatchStatus(s),
-      onOver: (result) => {
+      onOver: (result, _final, winnerTeam) => {
         screen = 'result';
+        // Report the outcome so the relay can update ratings (authoritative;
+        // every client reports, the relay applies it once per match).
+        client.reportResult(winnerTeam);
+        // Local DDA: a match with bots nudges your suggested tier (win twice →
+        // harder, lose twice → easier). Pre-selects the next "+ Bot" pick.
+        if (matchHadBots) ui.setSuggestedTier(recordBotResult(result));
         const detail =
           result === 'win'
             ? 'Your team is the last standing!'
@@ -257,6 +275,9 @@ export async function runNetMode(params: URLSearchParams): Promise<void> {
   ui.onJoinRoom = (n, roomId) => void joinFlow(n, roomId);
   ui.onQuickMatch = (n) => void joinFlow(n, 'test');
   ui.onReadyToggle = (ready) => lobby.setReady(ready);
+  ui.onAddBot = (slot, difficulty) => lobby.addBot(slot, difficulty);
+  ui.onRemoveBot = (slot) => lobby.removeBot(slot);
+  ui.setSuggestedTier(suggestedTier()); // seed the "+ Bot" picker from local DDA
   ui.onLeaveRoom = () => {
     lobby.leave();
     screen = 'landing';

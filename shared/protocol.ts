@@ -21,6 +21,9 @@ export const MsgType = {
   READY_TOGGLE: 0x03,
   INPUT_FRAME: 0x04,
   HASH_REPORT: 0x05,
+  ADD_BOT: 0x06,
+  REMOVE_BOT: 0x07,
+  MATCH_RESULT: 0x08,
 
   // Server → Client
   ROOM_STATE: 0x10,
@@ -63,6 +66,13 @@ export interface RoomPlayer {
   name: string;
   ready: boolean;
   connected: boolean;
+  /** True = an AI bot filling this slot (no socket; driven client-side). */
+  isBot?: boolean;
+  /** Bot strength tier ('easy' | 'normal' | 'hard'); resolved to a BT rung
+   *  per map on every client. Present only when isBot. */
+  botDifficulty?: string;
+  /** Conservative rating score (μ − 3σ); shown in the roster. */
+  score?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -74,6 +84,8 @@ export interface JoinRoomMsg {
   /** Room to join; empty string = create a new room. */
   roomId: string;
   name: string;
+  /** Persistent client id (localStorage) — the rating key for this player. */
+  playerId: string;
 }
 
 export interface LeaveRoomMsg {
@@ -83,6 +95,31 @@ export interface LeaveRoomMsg {
 export interface ReadyToggleMsg {
   type: typeof MsgType.READY_TOGGLE;
   ready: boolean;
+}
+
+/** Add an AI bot to a specific empty slot (lobby only). */
+export interface AddBotMsg {
+  type: typeof MsgType.ADD_BOT;
+  slot: number;
+  /** Strength tier: 'easy' | 'normal' | 'hard' (default 'normal'). */
+  difficulty: string;
+}
+
+/** Remove a bot from a slot (lobby only). */
+export interface RemoveBotMsg {
+  type: typeof MsgType.REMOVE_BOT;
+  slot: number;
+}
+
+/**
+ * Reported by clients when the sim reaches OVER: the winning team (= winning
+ * slot in the current FFA setup), or null for a draw. The relay never
+ * simulates, so this is how it learns the outcome — backed by lockstep hash
+ * agreement, and applied once per match.
+ */
+export interface MatchResultMsg {
+  type: typeof MsgType.MATCH_RESULT;
+  winnerTeam: number | null;
 }
 
 /** Local input sampled at tick t, scheduled for sim tick t + INPUT_DELAY_TICKS. */
@@ -106,6 +143,9 @@ export type ClientMsg =
   | JoinRoomMsg
   | LeaveRoomMsg
   | ReadyToggleMsg
+  | AddBotMsg
+  | RemoveBotMsg
+  | MatchResultMsg
   | InputFrameMsg
   | HashReportMsg;
 

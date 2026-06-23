@@ -10,18 +10,20 @@ registry.
 
 from util.id_gen import generate_room_id
 
+from .ratings import RatingStore
 from .room import Room
 
 
 class Lobby:
-    def __init__(self) -> None:
+    def __init__(self, store: RatingStore | None = None) -> None:
         self.rooms: dict[str, Room] = {}
+        self.store = store
 
     def create_room(self, room_id: str = "") -> Room:
         """Create a room; empty id = generate a fresh shareable random id."""
         if room_id == "":
             room_id = generate_room_id(taken=self.rooms)
-        room = Room(room_id=room_id)
+        room = Room(room_id=room_id, store=self.store)
         self.rooms[room_id] = room
         return room
 

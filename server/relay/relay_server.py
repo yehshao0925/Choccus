@@ -12,10 +12,12 @@ and silently ignored — the client simply receives no RoomState.
 """
 
 import asyncio
+import os
 
 from .constants import GamePhase
 from .lobby import Lobby
 from .protocol import MsgType, decode
+from .ratings import RatingStore
 
 
 def _log(msg: str) -> None:
@@ -48,8 +50,11 @@ class Connection:
 
 
 class RelayServer:
-    def __init__(self) -> None:
-        self.lobby = Lobby()
+    def __init__(self, db_path: str | None = None) -> None:
+        # Ratings persist to SQLite (path via CHOCCUS_RATINGS_DB, default file).
+        path = db_path or os.environ.get("CHOCCUS_RATINGS_DB", "choccus-ratings.db")
+        self.store = RatingStore(path)
+        self.lobby = Lobby(store=self.store)
 
     async def handler(self, ws) -> None:
         """websockets connection handler (pass to websockets serve())."""
@@ -81,6 +86,12 @@ class RelayServer:
             self._leave(conn)
         elif type_id == MsgType.READY_TOGGLE:
             self._ready(conn, payload)
+        elif type_id == MsgType.ADD_BOT:
+            self._add_bot(conn, payload)
+        elif type_id == MsgType.REMOVE_BOT:
+            self._remove_bot(conn, payload)
+        elif type_id == MsgType.MATCH_RESULT:
+            self._match_result(conn, payload)
         elif type_id == MsgType.INPUT_FRAME:
             self._input(conn, payload)
         elif type_id == MsgType.HASH_REPORT:
@@ -94,6 +105,7 @@ class RelayServer:
             return
         room_id = str(payload.get("roomId", ""))
         name = str(payload.get("name", ""))
+        player_id = str(payload.get("playerId", ""))
         # '' = create a fresh random-id room; a named id joins the existing
         # room or auto-creates it (lets clients meet at e.g. ?room=test).
         room = (
@@ -101,7 +113,7 @@ class RelayServer:
             if room_id == ""
             else self.lobby.get_or_create(room_id)
         )
-        slot = room.add_player(name, conn.send)
+        slot = room.add_player(name, conn.send, player_id)
         if slot is None:  # only possible for an existing room (full / playing)
             _log(f"join ignored: room {room.room_id} full or already playing")
             return
@@ -140,6 +152,42 @@ class RelayServer:
                 " — starting match"
             )
             room.start_match()
+
+    def _add_bot(self, conn: Connection, payload: dict) -> None:
+        room = conn.room
+        if room is None:
+            return
+        try:
+            slot = int(payload["slot"])
+        except (KeyError, TypeError, ValueError):
+            return
+        difficulty = str(payload.get("difficulty", "normal"))
+        if room.add_bot(slot, difficulty):
+            _log(f"room {room.room_id}: {difficulty} bot added to slot {slot}")
+            room.broadcast_room_state()
+
+    def _remove_bot(self, conn: Connection, payload: dict) -> None:
+        room = conn.room
+        if room is None:
+            return
+        try:
+            slot = int(payload["slot"])
+        except (KeyError, TypeError, ValueError):
+            return
+        if room.remove_bot(slot):
+            _log(f"room {room.room_id}: bot removed from slot {slot}")
+            room.broadcast_room_state()
+
+    def _match_result(self, conn: Connection, payload: dict) -> None:
+        room = conn.room
+        if room is None:
+            return
+        winner = payload.get("winnerTeam")
+        winner_team = int(winner) if isinstance(winner, (int, float)) else None
+        if room.apply_result(winner_team):
+            _log(f"room {room.room_id}: ratings updated (winner={winner_team})")
+            # Push the fresh scores so the post-match lobby shows them.
+            room.broadcast_room_state()
 
     def _input(self, conn: Connection, payload: dict) -> None:
         room, slot = conn.room, conn.slot
