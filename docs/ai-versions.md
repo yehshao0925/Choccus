@@ -1,6 +1,14 @@
 # AI 版本狀態（Choccus Bot）
 
-> 最後更新：2026-06-22（**死亡軌跡/空間診斷 → classic 對症修法成功：走廊感知放彈閘門**。詳見 §十。
+> 最後更新：2026-06-23（**連鎖修正（`35986f3`）重定基線 → BT 量尺兩圖重 seed**。詳見 §七「目前量尺」。
+> 重點：①`processDetonations` 曾邊傳播邊改 grid，使同 tick 共爆連鎖穿過剛清掉的磚（只發生在連鎖、單顆一向正確）；
+> 修正後手臂改讀 tick 起始層、每磚只清一次。②此機制改動會改變對局結果 → 在修好的 sim 上重跑
+> `bt-seed --repeats=100` ＋ `bt-rank`（v4:zoner @100、v5:zoner @40）兩圖（committed `bt-history/`）。
+> ③影響集中在磚密的 **pirate**（v3:trapper vs zoner +11；classic 僅 ±1–4 雜訊內）。④**冠軍不變**：
+> classic = v5:zoner（量尺 #1 1788、領先 v4 +36，直接 CRN 亦勝）；pirate = v4:zoner（量尺把 v5 排 #1，
+> 但 v4↔v5 為遞移推斷、未直接對打，直接 `v5-probe` CRN 為 v4 略勝 → 以直接 CRN 為準）。
+> ⚠ §七 的 v4/v5 就位表與 §八–§十 的 Elo 皆為 **chain-fix 前**快照（歷史記錄不改）；現役 committed 量尺＝本日重 seed 版。）
+> 最後更新前一版：2026-06-22（**死亡軌跡/空間診斷 → classic 對症修法成功：走廊感知放彈閘門**。詳見 §十。
 > 重點：①新工具 **`v5-trace`**（空間死亡回放，看 seal 怎麼合圍）。②**classic 死因＝trapper 的「單寬走廊
 > vChain 封殺＋自堵」**（`v5-diag` TRAPPED 28/33）→ 對症修法 **`corridorGate`**（敵近時放彈須有逃生分支
 > ≥2 的交叉口逃生點，否則否決）→ **classic Elo 1783→1827（#1 +61→+106）、vs v4 55.6%→68.8%、
@@ -197,18 +205,18 @@ v3 從 v2 原封複製後演進（v2 凍結不動）。**2026-06-20 大改：勝
 
 **非遞移診斷**：v3 是刻意 RPS 環，BT（單一尺度）會壓縮環內差距——這是特性不是 bug。`bt-rank` 另印**逐對手「觀測 vs BT 預測」殘差**，殘差大負＝該策略被某 v3 archetype 剋（單一 Elo 看不到的非遞移訊號）。
 
-**目前量尺**（2026-06-21 **以新 caps（fire 7 / cannon 6）重 seed**，`bt-seed --map=<m> --repeats=100`，每對 200 場 × 兩 seating、CRN，錨定池均值＝1500）：
+**目前量尺**（2026-06-23 **在 chain-fix 後的 sim 重 seed**，`bt-seed --repeats=100`，每對 200 場 × 兩 seating、CRN，錨定池均值＝1500；v3-only seed 值，v4/v5 就位見下）：
 
 | 名次 | classic | Elo | | pirate | Elo |
 | --- | --- | --- | --- | --- | --- |
-| 1 | v3:zoner | 1675 | | v3:zoner | 1758 |
-| 2 | v3:farmer | 1669 | | v3:farmer | 1744 |
-| 3 | v3:trapper | 1661 | | v3:trapper | 1738 |
-| 4 | v3:runner | 1478 | | v3:runner | 1620 |
-| 5 | v3:hunter | 1321 | | v3:hunter | 1264 |
-| 6 | v3:reactive | 1197 | | v3:reactive | 876 |
+| 1 | v3:zoner | 1685 | | v3:trapper | 1769 |
+| 2 | v3:trapper | 1677 | | v3:farmer | 1768 |
+| 3 | v3:farmer | 1671 | | v3:zoner | 1735 |
+| 4 | v3:runner | 1476 | | v3:runner | 1609 |
+| 5 | v3:hunter | 1318 | | v3:hunter | 1280 |
+| 6 | v3:reactive | 1173 | | v3:reactive | 839 |
 
-> 新 caps 下結構不變：發育／控場（zoner/farmer/trapper）擠在頂端 ~1660–1758，過度進攻的 hunter/reactive 墊底（reactive 開放 pirate 尤其弱）。量尺存於 `bt-history/{classic,pirate}.json`（committed）。**caps 改動會讓整池行為改變 → 必須重 seed**（這次兩圖都重跑過）。
+> 發育／控場（zoner/farmer/trapper）仍擠在頂端 ~1670–1770、過度進攻的 hunter/reactive 墊底（reactive 開放 pirate 尤其弱）；但 **chain-fix 後 trapper 相對上升**——classic 升到 #2（壓過 farmer）、pirate 升到 #1（壓過 zoner/farmer），因為磚密圖的封鎖連鎖不再穿磚漏接。量尺存於 `bt-history/{classic,pirate}.json`（committed）。**caps 或 sim 機制改動會讓整池行為改變 → 必須重 seed**（caps 2026-06-21、chain-fix 2026-06-23 各重跑過兩圖）。
 
 **v4:zoner 就位（新 caps、`bt-rank --map=<m> --repeats=100`）**：
 
