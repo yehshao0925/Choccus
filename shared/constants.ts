@@ -116,10 +116,13 @@ export const PLAYER_START_CANNON = 1;
 /** Max simultaneous bombs. Balance: raised 5 -> 6 (more bombs to build larger
  * blockades). Re-pins golden + re-seeds the BT yardstick. */
 export const PLAYER_MAX_CANNON = 6;
-/** Speed bonus: starts at 0, +0.4 tiles/s per item, capped at +2.0. */
+/** Speed bonus: starts at 0, +1.0 tiles/s per item, capped at +3.0. Aligned to
+ * BnB 囡囡/Uni speed 5/8 — base 5.0 → max 8.0, each roller-skate = +1 rung,
+ * 3 items to cap (was +0.4/+2.0 → max 7.0). Re-seeds the BT yardstick (both
+ * maps); re-pin golden if any speed-item replay diverges. */
 export const PLAYER_START_SPEED_BONUS = 0;
-export const SPEED_BONUS_PER_ITEM = 0.4;
-export const SPEED_BONUS_CAP = 2.0;
+export const SPEED_BONUS_PER_ITEM = 1.0;
+export const SPEED_BONUS_CAP = 3.0;
 
 // ---------------------------------------------------------------------------
 // Feel parameters — panel-adjustable defaults (frozen per match via FeelParams)
