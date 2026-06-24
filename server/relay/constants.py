@@ -20,6 +20,13 @@ STALL_TIMEOUT_MS = 200
 #: Clients report their state hash every N ticks for desync detection.
 HASH_REPORT_INTERVAL = 30
 
+#: Max ticks a client may legitimately run ahead of the relay's next_tick.
+#: Clients only ever send for currentTick + INPUT_DELAY_TICKS, so this is a
+#: tight bound comfortably above any real lead — it caps how far forward the
+#: coordinator buffers inputs/hashes so a flooding client can't grow those
+#: dicts without bound (remote OOM). Out-of-window ticks are silently dropped.
+MAX_TICK_LEAD = INPUT_DELAY_TICKS + HASH_REPORT_INTERVAL * 2
+
 #: Recent InputBroadcasts buffered per match for reconnect catch-up (M5).
 INPUT_HISTORY_SIZE = 64
 
@@ -27,6 +34,18 @@ INPUT_HISTORY_SIZE = 64
 
 #: One slot per spawn corner of the 15x13 map.
 MAX_PLAYERS = 4
+
+# --- Untrusted input caps ---------------------------------------------------
+# Client-supplied strings are re-broadcast to peers and written to SQLite, so
+# they are truncated on ingest to keep one client from bloating frames/storage
+# (the default 1 MiB ws frame is the only other limit). Truncation is silent.
+
+#: Max display-name length (chars).
+MAX_NAME_LEN = 32
+#: Max room id length (chars).
+MAX_ROOM_ID_LEN = 24
+#: Max rating-ladder player id length (chars).
+MAX_PLAYER_ID_LEN = 64
 
 # --- Feel parameters (shared/constants.ts defaults) -------------------------
 

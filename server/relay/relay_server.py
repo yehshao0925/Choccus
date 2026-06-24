@@ -14,7 +14,12 @@ and silently ignored — the client simply receives no RoomState.
 import asyncio
 import os
 
-from .constants import GamePhase
+from .constants import (
+    GamePhase,
+    MAX_NAME_LEN,
+    MAX_PLAYER_ID_LEN,
+    MAX_ROOM_ID_LEN,
+)
 from .lobby import Lobby
 from .protocol import MsgType, decode
 from .ratings import RatingStore
@@ -103,9 +108,13 @@ class RelayServer:
         if conn.room is not None:
             _log("join ignored: connection already in a room")
             return
-        room_id = str(payload.get("roomId", ""))
-        name = str(payload.get("name", ""))
-        player_id = str(payload.get("playerId", ""))
+        room_id = str(payload.get("roomId", ""))[:MAX_ROOM_ID_LEN]
+        name = str(payload.get("name", ""))[:MAX_NAME_LEN]
+        # ponytail: playerId is the client-supplied rating-ladder key with NO
+        # auth — a client can claim any id and farm/grief that ladder slot.
+        # Closing this needs a server-issued identity/session system, which is
+        # deliberately deferred (over-engineering for a pure relay). Capped only.
+        player_id = str(payload.get("playerId", ""))[:MAX_PLAYER_ID_LEN]
         # '' = create a fresh random-id room; a named id joins the existing
         # room or auto-creates it (lets clients meet at e.g. ?room=test).
         room = (
@@ -179,12 +188,14 @@ class RelayServer:
             room.broadcast_room_state()
 
     def _match_result(self, conn: Connection, payload: dict) -> None:
-        room = conn.room
-        if room is None:
+        room, slot = conn.room, conn.slot
+        if room is None or slot is None:
             return
         winner = payload.get("winnerTeam")
         winner_team = int(winner) if isinstance(winner, (int, float)) else None
-        if room.apply_result(winner_team):
+        # Consensus: ratings apply only once every connected human slot reports
+        # the same winner (apply_result enforces it); a single report is buffered.
+        if room.apply_result(slot, winner_team):
             _log(f"room {room.room_id}: ratings updated (winner={winner_team})")
             # Push the fresh scores so the post-match lobby shows them.
             room.broadcast_room_state()

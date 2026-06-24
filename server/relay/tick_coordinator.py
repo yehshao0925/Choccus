@@ -21,7 +21,12 @@ import asyncio
 from collections import deque
 from collections.abc import Callable, Iterable
 
-from .constants import INPUT_DELAY_TICKS, INPUT_HISTORY_SIZE, STALL_TIMEOUT_MS
+from .constants import (
+    INPUT_DELAY_TICKS,
+    INPUT_HISTORY_SIZE,
+    MAX_TICK_LEAD,
+    STALL_TIMEOUT_MS,
+)
 from .protocol import hash_mismatch, input_broadcast, stall_notice, tick_ready
 
 #: Neutral input substituted for slots with no frame (disconnected / vacated).
@@ -65,8 +70,12 @@ class TickCoordinator:
 
     def on_input(self, slot: int, t: int, dirs: int, actions: int) -> None:
         """Record one slot's InputFrame for sim tick t and advance if complete."""
-        if slot not in self.slots or t < self.next_tick:
-            return  # unknown slot, or late frame for an already-broadcast tick
+        if slot not in self.slots or not (
+            self.next_tick <= t <= self.next_tick + MAX_TICK_LEAD
+        ):
+            return  # unknown slot, late frame, or out of the bounded forward
+            # window (untrusted t: drop distant future ticks so a flooding
+            # client can't grow self.inputs without bound — remote OOM)
         self.inputs.setdefault(t, {})[slot] = (dirs, actions)
         self._advance()
 
@@ -84,6 +93,7 @@ class TickCoordinator:
         return all(slot in got for slot in self.connected)
 
     def _advance(self) -> None:
+        advanced = False
         while self.connected and self._tick_complete(self.next_tick):
             t = self.next_tick
             got = self.inputs.pop(t, {})
@@ -98,6 +108,12 @@ class TickCoordinator:
             self.broadcast(frame)
             self.broadcast(tick_ready(t))
             self.next_tick += 1
+            advanced = True
+        if advanced:
+            # Drop stale partial hash reports that fell below next_tick: they can
+            # never complete (the tick has passed), so without this a client that
+            # reports a never-completed in-window tick per advance leaks hashes.
+            self.hashes = {t: g for t, g in self.hashes.items() if t >= self.next_tick}
         self._update_stall_timer()
 
     # -- stall detection ---------------------------------------------------------
@@ -139,8 +155,12 @@ class TickCoordinator:
 
     def on_hash(self, slot: int, t: int, hash_: int) -> None:
         """Record a HashReport; once all connected slots reported t, compare."""
-        if slot not in self.slots:
-            return
+        if slot not in self.slots or not (
+            self.next_tick <= t <= self.next_tick + MAX_TICK_LEAD
+        ):
+            return  # unknown slot, or out of the bounded forward window: a hash
+            # for an already-advanced tick (t < next_tick) can never be compared,
+            # and an unbounded future t would grow self.hashes forever (OOM)
         self.hashes.setdefault(t, {})[slot] = hash_
         self._check_hashes(t)
 

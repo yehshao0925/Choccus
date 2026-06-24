@@ -2,6 +2,7 @@
 
 import asyncio
 
+from relay.constants import MAX_TICK_LEAD
 from relay.protocol import MsgType, decode
 from relay.tick_coordinator import TickCoordinator
 
@@ -69,6 +70,17 @@ def test_late_and_duplicate_inputs_ignored():
     coord.on_input(0, 2, 9, 9)  # tick 2 already broadcast
     coord.on_input(7, 3, 1, 0)  # unknown slot
     assert len(out.msgs) == before
+
+
+def test_input_beyond_forward_window_is_dropped():
+    # A flooding client sending distant future ticks must not grow self.inputs.
+    coord, out = make()  # next_tick == 2, window == [2, 2 + MAX_TICK_LEAD]
+    coord.on_input(0, 2 + MAX_TICK_LEAD, 1, 0)  # at the edge: accepted
+    coord.on_input(0, 2 + MAX_TICK_LEAD + 1, 1, 0)  # just past: dropped
+    coord.on_input(0, 2**31, 1, 0)  # far future flood: dropped
+    coord.on_input(0, 2**31 + 1, 1, 0)
+    assert set(coord.inputs) == {2 + MAX_TICK_LEAD}  # only the in-window tick kept
+    assert out.msgs == []  # nothing broadcast
 
 
 def test_history_buffer_for_reconnect():
@@ -175,3 +187,26 @@ def test_hash_compare_skips_disconnected_slot():
     coord.mark_disconnected(1)  # comparison completes with slot 0 alone
     assert coord.hashes == {}
     assert out.of_type(MsgType.HASH_MISMATCH) == []
+
+
+def test_hash_outside_forward_window_is_dropped():
+    # on_hash has no notion of "complete" without all slots, so an out-of-window
+    # report must be refused at the door or self.hashes grows without bound.
+    coord, out = make()  # next_tick == 2
+    coord.on_hash(0, 1, 0xAAAA)  # below next_tick: can never be compared
+    coord.on_hash(0, 2 + MAX_TICK_LEAD + 1, 0xBBBB)  # past window: flood
+    coord.on_hash(0, 2**31, 0xCCCC)
+    assert coord.hashes == {}  # all rejected
+
+
+def test_partial_hashes_below_next_tick_are_pruned_on_advance():
+    # A client reporting a never-completed in-window tick each advance would
+    # leak self.hashes; advancing past such a tick must drop the stale entry.
+    coord, out = make()
+    coord.on_hash(0, 5, 0xDEAD)  # only slot 0; slot 1 never reports tick 5
+    assert coord.hashes == {5: {0: 0xDEAD}}
+    for t in range(2, 7):  # drive next_tick past 5
+        coord.on_input(0, t, 1, 0)
+        coord.on_input(1, t, 2, 0)
+    assert coord.next_tick == 7
+    assert coord.hashes == {}  # stale partial entry pruned, no leak

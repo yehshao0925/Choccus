@@ -26,7 +26,9 @@ PORT = int(os.environ.get("CHOCCUS_PORT", "8765"))
 
 async def main() -> None:
     relay = RelayServer()
-    async with serve(relay.handler, HOST, PORT):
+    # Relay frames are tiny (inputs/hashes + capped strings); 8 KiB is plenty
+    # and far below the 1 MiB default, shrinking the per-frame OOM surface.
+    async with serve(relay.handler, HOST, PORT, max_size=8 * 1024):
         loop = "uvloop" if uvloop is not None else "asyncio"
         print(
             f"[choccus] relay server listening on ws://{HOST}:{PORT} ({loop})",
