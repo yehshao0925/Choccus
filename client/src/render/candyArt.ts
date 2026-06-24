@@ -66,18 +66,19 @@ const MILK = {
   explHi: '#FFF3D2',
   explMid: '#FBD896',
   explLo: '#EDB055',
-  explCore: '#FFDC92',
   explShadow: 'rgba(120,64,22,.42)',
   eye: '#3A2A22',
   cheek: 'rgba(244,120,150,.55)',
 } as const;
 
-// Whipped-meringue dome trapping a caught cutie (design SHELL).
+// Hardened dark-chocolate dome trapping a caught cutie (design SHELL): the same
+// chocolate that melted to attack, now SET around the player — "一物兩用". Glossy
+// dark ganache, cream-coloured eyes (only colour that reads through the dark).
 const SHELL = {
-  body: 'linear-gradient(168deg,#FBE9C6,#EDD09A 56%,#D4B179)',
-  eye: '#7A5A34',
+  body: 'linear-gradient(168deg,#6B4423,#4A2C16 56%,#341d0e)',
+  eye: '#FBE9C6',
   shell:
-    'radial-gradient(circle at 34% 26%, rgba(255,255,255,.95), rgba(255,250,236,.42) 44%, rgba(250,228,182,.4) 70%, rgba(240,210,150,.5))',
+    'radial-gradient(circle at 34% 26%, rgba(255,236,210,.92), rgba(150,92,46,.5) 40%, rgba(74,44,22,.62) 70%, rgba(45,26,14,.72))',
 } as const;
 
 /** Per item kind: same candy diamond, tinted so kinds stay distinguishable. */
@@ -466,14 +467,29 @@ export function explosionHtml(mask: number): string {
   }
 
   if (center) {
-    // White-hot core + droplets at the blast origin (junctions are few).
+    // Blast origin = the chocolate cake bursting apart: a molten-ganache core +
+    // dark-sponge cake chunks (cream-capped) flung onto the DIAGONALS so they fill
+    // the gaps between the orthogonal arms and never sit on the amber kill-zone.
+    // Chunk = dark sponge body + cream frosting cap, rotated; crumb = tiny choc dot.
+    const chunk = (dx: number, dy: number, d: number, s: number, rot: number) => {
+      const x = CX + dx * d,
+        y = CY + dy * d;
+      return `<div style="position:absolute;left:${x - s / 2}px;top:${y - s / 2}px;width:${s}px;height:${s}px;border-radius:4px;` +
+        `background:linear-gradient(160deg,#6B4423,#4A2C16);transform:rotate(${rot}deg);box-shadow:0 1px 2px rgba(0,0,0,.3);">` +
+        `<div style="position:absolute;left:0;top:0;width:100%;height:38%;border-radius:4px 4px 2px 2px;background:linear-gradient(180deg,#FBE9C6,#EAD3A2);"></div></div>`;
+    };
+    const crumb = (dx: number, dy: number, d: number, s: number) =>
+      `<div style="position:absolute;left:${CX + dx * d - s / 2}px;top:${CY + dy * d - s / 2}px;width:${s}px;height:${s}px;border-radius:50%;background:#5A3619;"></div>`;
     h +=
-      `<div style="position:absolute;left:${CX - 16}px;top:${CY - 14}px;width:32px;height:28px;border-radius:50%;` +
-      `background:radial-gradient(circle,#fff,${MILK.explCore} 72%);box-shadow:0 0 14px 4px ${MILK.explGlow};"></div>` +
-      `<div style="position:absolute;left:${CX - 30}px;top:${CY - 22}px;width:11px;height:11px;border-radius:50%;background:${MILK.explLo};"></div>` +
-      `<div style="position:absolute;left:${CX + 21}px;top:${CY - 18}px;width:9px;height:9px;border-radius:50%;background:${MILK.explHi};"></div>` +
-      `<div style="position:absolute;left:${CX - 26}px;top:${CY + 15}px;width:8px;height:8px;border-radius:50%;background:${MILK.explMid};"></div>` +
-      `<div style="position:absolute;left:${CX + 24}px;top:${CY + 13}px;width:10px;height:10px;border-radius:50%;background:${MILK.explLo};"></div>`;
+      // molten-chocolate core (the cake's melting centre)
+      `<div style="position:absolute;left:${CX - 10}px;top:${CY - 10}px;width:20px;height:20px;border-radius:50%;` +
+      `background:radial-gradient(circle at 38% 32%,#7A4E29,#4A2C16 70%);box-shadow:0 0 9px 3px rgba(120,64,22,.5);"></div>` +
+      `<div style="position:absolute;left:${CX - 4}px;top:${CY - 6}px;width:6px;height:4px;border-radius:50%;background:rgba(255,240,210,.8);filter:blur(.4px);"></div>` +
+      // four cake chunks blown out on the diagonals
+      chunk(-1, -1, 15, 11, -18) + chunk(1, -1, 16, 10, 22) +
+      chunk(-1, 1, 15, 9, 12) + chunk(1, 1, 17, 11, -26) +
+      // a few stray crumbs farther out
+      crumb(-1, -1, 23, 3) + crumb(1, 1, 24, 3) + crumb(1, -1, 22, 2);
   }
   return h;
 }
@@ -563,10 +579,10 @@ export function shellHtml(): string {
     `<div style="position:absolute;left:${CX - 7}px;top:4px;width:5px;height:5px;border-radius:50%;background:${SHELL.eye};"></div>` +
     `<div style="position:absolute;left:${CX + 2}px;top:4px;width:5px;height:5px;border-radius:50%;background:${SHELL.eye};"></div>` +
     `<div style="position:absolute;left:${CX - 22}px;top:-13px;width:44px;height:48px;` +
-    `border-radius:50% 50% 47% 47%/55% 55% 45% 45%;background:${SHELL.shell};border:2px solid rgba(255,255,255,.78);` +
-    `box-shadow:inset 0 -8px 13px rgba(214,170,110,.4),inset 0 8px 13px rgba(255,255,255,.8),0 6px 11px rgba(0,0,0,.16);"></div>` +
+    `border-radius:50% 50% 47% 47%/55% 55% 45% 45%;background:${SHELL.shell};border:2px solid rgba(120,70,38,.6);` +
+    `box-shadow:inset 0 -8px 13px rgba(40,22,10,.5),inset 0 8px 13px rgba(255,255,255,.5),0 6px 11px rgba(0,0,0,.16);"></div>` +
     `<div style="position:absolute;left:${CX - 11}px;top:-8px;width:12px;height:19px;border-radius:50%;` +
-    `background:rgba(255,255,255,.85);transform:rotate(20deg);filter:blur(.5px);"></div>` +
+    `background:rgba(255,255,255,.7);transform:rotate(20deg);filter:blur(.5px);"></div>` +
     `<div style="position:absolute;left:${CX + 7}px;top:-10px;width:6px;height:6px;border-radius:1px;` +
     `background:#fff;transform:rotate(45deg);box-shadow:0 0 7px 2px rgba(255,255,255,.9);"></div>`
   );
