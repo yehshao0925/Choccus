@@ -94,7 +94,7 @@ function section(title: string, intro: string, cardsHtml: string): string {
   );
 }
 
-export function runGuide(_params: URLSearchParams): void {
+export function runGuide(): void {
   const mount = document.getElementById('app');
   if (!mount) throw new Error('#app mount point missing');
 
