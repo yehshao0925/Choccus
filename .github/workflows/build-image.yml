@@ -3,6 +3,10 @@ name: build-image
 # Builds the Docker image and pushes it to ghcr. PRs push a `dev` + `sha-`
 # tagged test image you can spin a server from; main additionally moves the
 # `latest` tag. The merge gate (lint + tests) lives in test.yml.
+#
+# Docs-only changes skip the build but the `build` job still reports success
+# (required-check names must always post a conclusion), so steps are gated on a
+# path filter, never the job.
 on:
   pull_request:
   push:
@@ -13,12 +17,35 @@ permissions:
   packages: write
 
 jobs:
-  build:
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      img: ${{ steps.filter.outputs.img }}
     steps:
       - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            img:
+              - 'client/**'
+              - 'shared/**'
+              - 'server/**'
+              - 'scripts/**'
+              - 'Dockerfile'
+              - '**/package.json'
+              - 'package-lock.json'
+              - '.github/workflows/**'
 
-      - uses: docker/login-action@v3
+  build:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - if: needs.changes.outputs.img == 'true'
+        uses: actions/checkout@v4
+
+      - if: needs.changes.outputs.img == 'true'
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -27,7 +54,8 @@ jobs:
       # `latest` only on main; PRs move `dev` and always get an immutable sha
       # tag. Fork PRs get a read-only token and would fail to push, but this
       # repo only builds its own branches.
-      - id: meta
+      - if: needs.changes.outputs.img == 'true'
+        id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
@@ -36,7 +64,8 @@ jobs:
             type=raw,value=dev,enable=${{ github.event_name == 'pull_request' }}
             type=sha
 
-      - uses: docker/build-push-action@v6
+      - if: needs.changes.outputs.img == 'true'
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true

@@ -5,28 +5,67 @@ name: test
 # merge, so the merged code == the tested PR code and re-running on main would
 # be pure redundancy. (Slow statistical AI self-trap sweeps are excluded from
 # test:ci and run locally before shipping.)
+#
+# Docs-only PRs skip the actual test work but the jobs still report success:
+# the required-check names (test-js / test-py) must always post a conclusion,
+# so we gate the STEPS on a path filter, never the job (a skipped required job
+# would stick the PR pending forever).
 on:
   pull_request:
 
 jobs:
-  test-js:
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      js: ${{ steps.filter.outputs.js }}
+      py: ${{ steps.filter.outputs.py }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            js:
+              - 'client/**'
+              - 'shared/**'
+              - 'tools/**'
+              - 'scripts/**'
+              - '**/package.json'
+              - 'package-lock.json'
+              - '.github/workflows/**'
+            py:
+              - 'server/**'
+              - '.github/workflows/**'
+
+  test-js:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - if: needs.changes.outputs.js == 'true'
+        uses: actions/checkout@v4
+      - if: needs.changes.outputs.js == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run test:ci
+      - if: needs.changes.outputs.js == 'true'
+        run: npm ci
+      - if: needs.changes.outputs.js == 'true'
+        run: npm run lint
+      - if: needs.changes.outputs.js == 'true'
+        run: npm run test:ci
 
   test-py:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - if: needs.changes.outputs.py == 'true'
+        uses: actions/checkout@v4
+      - if: needs.changes.outputs.py == 'true'
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r server/requirements.txt
-      - run: python -m pytest server/tests -q
+      - if: needs.changes.outputs.py == 'true'
+        run: pip install -r server/requirements.txt
+      - if: needs.changes.outputs.py == 'true'
+        run: python -m pytest server/tests -q

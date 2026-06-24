@@ -46,6 +46,21 @@ Monorepo：npm workspaces = `client` + `tools/sim-runner`；Python relay 在 `se
 | `npm run replay -- fixtures/<f>.json [--jsonl]` | 跑 replay，逐 tick 印 `tick,hashHex` |
 | `npm run gen-fixtures` / `npm run update-golden` | 重產 fixtures / 故意改 sim 後重 pin `fixtures/golden.json` |
 
+### 跨機器拆 job 平行跑（慢測試／bench 的 work-stealing 分擔）
+
+慢的統計型測試（`ai-selfkill` 三難度 ~8.5min、`ai-chaosv` ~5min；已從 `test:ci` 排除、出貨前本機跑）與 AI bench 都可切片分散到多台機器跑。**唯一前提是 CRN 決定性**：純整數 sim、無 wall-clock，同 seed 在任何機器算出來 byte-identical → 任意切法的聯集 == 單機跑全部，跨機器結果可直接信、可合併。
+
+**拆片規則**：
+
+- **切片軸＝seed 區間**。測量函式（`measureSelfTrapRate(difficulty, seedStart, seedCount)` 等）本來就吃 (起點, 數量) → 零重構即可切。自然的 job 單位＝`(測種 × 難度/archetype × seed-chunk)`。
+- **合併鐵則**：測量函式回傳的是**原始計數**（`botsSelfTrapped` / `botMatches`、`self` / `eliminations`…），不是只有 rate。合併＝**加總各片計數再重算 rate**（`sum/sum`），**絕不能平均各片的 rate**（片大小不等會錯）。斷言（rate < 門檻）只能在合併後的 tally 上做。
+- **斷言邊界免合併的捷徑**：每個難度是獨立測量、各有自己的門檻 → 若只按 `(難度)` 拆、不切 seed，各片各自斷言、無需合併（最省事；想更快才切 seed + 合併計數）。
+- **bench（`bt-rank`／`v3-bench`）**：機內已 `--workers=N` 平行；跨機器再切就分 `--repeats` 區間、合併勝負 tally（同樣 CRN-safe）。
+
+**dispatcher（work-stealing pull 佇列，非靜態切半）**：把所有切片丟進一個共用 job 佇列，worker 數＝各機器並行槽位總和（local 8 + mc 12 = 20），每個 worker 跑完手上的 job 就抓下一個 index（local 直接跑、遠端走 `ssh`）→ 哪台先空哪台先拿，自動吸收機器速度差與各 job 成本不均。**遠端機器跑前必須先 `git checkout` 到本機當前 HEAD**（測同一份 code）。對應 CI 就是 GitHub Actions 的 `matrix:`（每難度一個 runner）。
+
+**遠端 bench 節點 `mc`**：12 核 Ubuntu Linux、金鑰免密 ssh、repo 在 `~/git/Choccus`。Node v22 直接跑 JS bench／`test:ci`；Python 用 uv 管的 3.12（`server/.venv`，deadsnakes 已停更 20.04 故走 uv）跑 relay pytest。透過 `ssh mc 'cd ~/git/Choccus && git checkout <branch> && npm run <bench> -- --workers=10 ...'` 派工。
+
 ## 程式架構（Code Architecture）
 
 Monorepo：`client/`（TS + Vite + Pixi.js v8 前端）、`tools/sim-runner/`（headless 決定性測試 + AI bench，跑在 Node/tsx/vitest）、`server/`（Python WebSocket relay）、`shared/`（前後端共用 `constants.ts` / `types.ts` / `protocol.ts`）、`dypm.md`（AI 評分迴圈設計參考）。
