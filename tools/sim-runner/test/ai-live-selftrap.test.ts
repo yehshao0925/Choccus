@@ -2,10 +2,12 @@
  * Self-preservation guard for the NEW LIVE BotController (single weighted
  * scoring loop). Distinct from ai-selfkill.test.ts in two ways:
  *   1. ai-selfkill measures the three Difficulty PRESETS via measureSelfTrapRate;
- *      here we ALSO drive all FOUR live STRATEGIES archetypes directly with the
- *      live BotController (replicating the runSelfTrapMatch loop, since
+ *      here we ALSO drive every live STRATEGIES archetype directly with the
+ *      live v5 BotController (replicating the runSelfTrapMatch loop, since
  *      measureSelfTrapRate keys off Difficulty and cannot take a strategy
- *      tuning), and assert a per-preset ceiling.
+ *      tuning), and assert a per-preset ceiling. (v2 shipped four archetypes;
+ *      the live v5 backbone has collapsed to a single Zoner strategy — this
+ *      iterates whatever STRATEGIES the live version defines.)
  *   2. We assert a TIGHT AGGREGATE — the average botsSelfTrappedRate across all
  *      three difficulties — well below where the old hierarchical bot sat,
  *      pinning the scoring loop's emergent self-safety.
@@ -23,14 +25,14 @@ import { type InputFrame } from '../../../client/src/sim/InputBuffer';
 import { idx, inBounds } from '../../../client/src/sim/Map';
 import { tileOf } from '../../../client/src/sim/Player';
 import { createInitialState, tick, type SimState } from '../../../client/src/sim/Sim';
-import { BotController } from '../../../client/src/ai/v2/BotController';
+import { BotController } from '../../../client/src/ai/v5/BotController';
 import {
   type BotTuning,
   botSeed,
   tuningFor,
   type Difficulty,
-} from '../../../client/src/ai/v2/BotConfig';
-import { STRATEGIES } from '../../../client/src/ai/v2/Strategies';
+} from '../../../client/src/ai/v5/BotConfig';
+import { STRATEGIES } from '../../../client/src/ai/v5/Strategies';
 import { measureSelfTrapRate } from '../src/selfkill';
 import { yieldToEventLoop } from '../src/async-yield';
 
@@ -165,7 +167,7 @@ describe('Live BotController (scoring loop) self-trap rate stays low', () => {
     expect(agg).toBeLessThan(AGG_CEILING);
   });
 
-  it(`each of the 4 STRATEGIES keeps < ${(STRATEGY_CEILING * 100).toFixed(0)}% self-trap`, async () => {
+  it(`each of the ${STRATEGIES.length} STRATEGIES keeps < ${(STRATEGY_CEILING * 100).toFixed(0)}% self-trap`, async () => {
     for (const s of STRATEGIES) {
       const rate = await measureStrategy(s.tuning, SEED_START, SEED_COUNT);
       console.log(`[live self-trap] strategy ${s.key} = ${rate.toFixed(4)}`);

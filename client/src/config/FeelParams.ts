@@ -17,8 +17,9 @@ import {
 export interface FeelParams {
   /** Move speed in tiles/s (spec range 3–8). */
   readonly moveSpeed: number;
-  /** Corner-assist tolerance in tiles (spec range 0–0.5). */
-  readonly cornerAssistTolerance: number;
+  /** Corner-assist tolerance in tiles (spec range 0–0.5). Named to match the
+   *  wire field `cornerAssist` (shared/protocol.ts) so the two never drift. */
+  readonly cornerAssist: number;
   /** Input buffer in ms (spec range 0–250). */
   readonly inputBufferMs: number;
 }
@@ -31,8 +32,8 @@ function clamp(v: number, min: number, max: number): number {
 export function makeFeelParams(partial?: Partial<FeelParams>): FeelParams {
   return Object.freeze({
     moveSpeed: clamp(partial?.moveSpeed ?? DEFAULT_MOVE_SPEED, 3, 8),
-    cornerAssistTolerance: clamp(
-      partial?.cornerAssistTolerance ?? DEFAULT_CORNER_ASSIST,
+    cornerAssist: clamp(
+      partial?.cornerAssist ?? DEFAULT_CORNER_ASSIST,
       0,
       0.5,
     ),
@@ -56,7 +57,7 @@ export function moveSpeedMtPerTick(fp: FeelParams): number {
 
 /** Corner-assist tolerance in millitiles (int). Default 0.25 → 250. */
 export function cornerAssistMt(fp: FeelParams): number {
-  return Math.round(fp.cornerAssistTolerance * MILLITILE);
+  return Math.round(fp.cornerAssist * MILLITILE);
 }
 
 /** Input buffer window in ticks (int). Default 120 ms → 7. */

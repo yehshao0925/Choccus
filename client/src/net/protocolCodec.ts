@@ -142,14 +142,24 @@ export function decodeServerMsg(data: Uint8Array): ServerMsg {
         youSlot: p['youSlot'] as number,
         players: p['players'] as RoomPlayer[],
       } satisfies RoomStateMsg;
-    case MsgType.MATCH_START:
+    case MsgType.MATCH_START: {
+      // Decode config field-by-field so each wire field name appears explicitly
+      // at the boundary — a rename in shared/protocol.ts then fails to compile
+      // here instead of slipping through an opaque `as FeelParams` cast.
+      const c = p['config'] as Record<string, unknown>;
+      const config: FeelParams = {
+        moveSpeed: c['moveSpeed'] as number,
+        cornerAssist: c['cornerAssist'] as number,
+        inputBufferMs: c['inputBufferMs'] as number,
+      };
       return {
         type: MsgType.MATCH_START,
         seed: p['seed'] as number,
         slot: p['slot'] as number,
-        config: p['config'] as FeelParams,
+        config,
         t0: p['t0'] as number,
       } satisfies MatchStartMsg;
+    }
     case MsgType.INPUT_BROADCAST:
       return {
         type: MsgType.INPUT_BROADCAST,

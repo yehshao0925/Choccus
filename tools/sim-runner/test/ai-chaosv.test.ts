@@ -18,10 +18,12 @@
  * Difficulty presets and cannot take ChaosV's custom tuning. Fully
  * deterministic: BotController carries its own RNG; the sim is pure.
  *
- * This guard runs the LIVE bot (BotController + the live ChaosV tuning from
- * STRATEGIES), pinning the LIVE ChaosV archetype's self-trap rate low: it is a
- * regression guard against the current live ChaosV decision logic, not a frozen
- * baseline.
+ * This guard runs the LIVE bot (v5 BotController + the live archetype tuning
+ * from STRATEGIES — see LIVE_STRATEGY below), pinning the live archetype's
+ * V-chain self-trap rate low: it is a regression guard against the current live
+ * decision logic, not a frozen baseline. (The v2 'chaosv' archetype this test
+ * was born for has since folded into the single v5 Zoner backbone; the V-chain
+ * own-bomb attribution still exercises the live bomb/escape cycle.)
  */
 import { describe, expect, it } from 'vitest';
 
@@ -34,11 +36,16 @@ import { type InputFrame } from '../../../client/src/sim/InputBuffer';
 import { idx, inBounds } from '../../../client/src/sim/Map';
 import { tileOf } from '../../../client/src/sim/Player';
 import { createInitialState, tick, type SimState } from '../../../client/src/sim/Sim';
-import { BotController } from '../../../client/src/ai/v2/BotController';
-import { botSeed } from '../../../client/src/ai/v2/BotConfig';
-import { STRATEGIES } from '../../../client/src/ai/v2/Strategies';
+import { BotController } from '../../../client/src/ai/v5/BotController';
+import { botSeed } from '../../../client/src/ai/v5/BotConfig';
+import { STRATEGIES } from '../../../client/src/ai/v5/Strategies';
 
-const CHAOSV = STRATEGIES.find((s) => s.key === 'chaosv')!;
+// v2 had a dedicated 'chaosv' V-chain archetype; the live v5 backbone collapsed
+// to a single Zoner strategy (chaosv's descendant lineage went v3:trapper →
+// folded away). With no 'chaosv' key on the live roster, this guard now pins the
+// self-trap safety of the LIVE archetype (STRATEGIES[0]) driven through the same
+// V-chain-aware own-bomb attribution below.
+const LIVE_STRATEGY = STRATEGIES.find((s) => s.key === 'chaosv') ?? STRATEGIES[0]!;
 
 const SEED_START = 1;
 const SEED_COUNT = 80;
@@ -105,7 +112,7 @@ function runSelfTrapMatch(
   const teams = Array.from({ length: numBots }, (_, i) => i % 2); // 0,1,0,1…
   let state: SimState = createInitialState(seed, fp, numBots, { teams });
   const controllers = state.players.map(
-    (p) => new BotController(botSeed(seed, p.slot), CHAOSV.tuning, p.slot),
+    (p) => new BotController(botSeed(seed, p.slot), LIVE_STRATEGY.tuning, p.slot),
   );
 
   const wasTrapped = state.players.map(() => false);

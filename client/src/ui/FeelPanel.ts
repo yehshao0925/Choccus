@@ -49,7 +49,7 @@ const SLIDERS: Record<keyof FeelParams, SliderSpec> = {
     default: DEFAULT_MOVE_SPEED,
     format: (v) => `${v.toFixed(1)} tiles/s`,
   },
-  cornerAssistTolerance: {
+  cornerAssist: {
     label: 'Corner assist',
     min: 0,
     max: 0.5,

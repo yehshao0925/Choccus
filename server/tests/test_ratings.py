@@ -56,14 +56,52 @@ def test_games_accumulate_across_matches():
     assert games == 2
 
 
-def test_room_apply_result_rates_once_and_updates_scores():
-    store = RatingStore()
+def _started_two_human_room(store):
     room = Lobby(store=store).create_room()
     room.add_player("alice", noop, "pid-a")
     room.add_player("bob", noop, "pid-b")
     room.set_ready(0, True)
     room.set_ready(1, True)
     room.start_match()
-    assert room.apply_result(winner_team=0) is True  # alice (slot 0) wins
-    assert room.apply_result(winner_team=0) is False  # once per match only
+    return room
+
+
+def test_room_apply_result_rates_on_full_consensus_once():
+    store = RatingStore()
+    room = _started_two_human_room(store)
+    # Only one human reported -> buffered, not yet rated.
+    assert room.apply_result(0, winner_team=0) is False
+    assert store.get("pid-a") == (DEFAULT_MU, DEFAULT_SIGMA)
+    # Second human agrees -> rated exactly once.
+    assert room.apply_result(1, winner_team=0) is True  # alice (slot 0) wins
+    assert room.apply_result(0, winner_team=0) is False  # locked after rating
     assert store.get("pid-a")[0] > DEFAULT_MU > store.get("pid-b")[0]
+
+
+def test_room_apply_result_disagreement_is_not_rated_and_locks_out():
+    store = RatingStore()
+    room = _started_two_human_room(store)
+    assert room.apply_result(0, winner_team=0) is False  # alice claims herself
+    assert room.apply_result(1, winner_team=1) is False  # bob claims himself
+    # Disputed: nothing applied, and a later "honest" re-report can't game it.
+    assert store.get("pid-a") == (DEFAULT_MU, DEFAULT_SIGMA)
+    assert store.get("pid-b") == (DEFAULT_MU, DEFAULT_SIGMA)
+    assert room.apply_result(0, winner_team=0) is False
+
+
+def test_room_apply_result_lone_connected_human_single_report_counts():
+    store = RatingStore()
+    room = _started_two_human_room(store)
+    room.remove_player(1)  # bob disconnects mid-match (slot kept, not connected)
+    # Only one human is connected -> its single report is accepted (degenerate).
+    assert room.apply_result(0, winner_team=0) is True
+    assert store.get("pid-a")[0] > DEFAULT_MU
+
+
+def test_room_apply_result_ignores_bot_and_unknown_slots():
+    store = RatingStore()
+    room = _started_two_human_room(store)
+    assert room.apply_result(9, winner_team=0) is False  # no such slot
+    # Real humans still drive consensus afterwards.
+    assert room.apply_result(0, winner_team=0) is False
+    assert room.apply_result(1, winner_team=0) is True

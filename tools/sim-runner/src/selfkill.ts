@@ -25,9 +25,9 @@ import { type InputFrame } from '../../../client/src/sim/InputBuffer';
 import { idx, inBounds } from '../../../client/src/sim/Map';
 import { tileOf } from '../../../client/src/sim/Player';
 import { createInitialState, tick, type SimState } from '../../../client/src/sim/Sim';
-// Single-version measurement tool: pinned to the latest live AI version (v2).
-import { BotController } from '../../../client/src/ai/v2/BotController';
-import { botSeed, tuningFor, type Difficulty } from '../../../client/src/ai/v2/BotConfig';
+// Single-version measurement tool: pinned to the latest live AI version (v5).
+import { BotController } from '../../../client/src/ai/v5/BotController';
+import { botSeed, tuningFor, type Difficulty } from '../../../client/src/ai/v5/BotConfig';
 import { yieldToEventLoop } from './async-yield';
 
 export type DeathCause = 'self' | 'foe' | 'other';

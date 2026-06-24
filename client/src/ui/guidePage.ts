@@ -4,6 +4,13 @@
  * generators so the guide can never drift from what the game actually draws.
  * Pure DOM: no sim, no net, no wall-clock.
  */
+import {
+  ITEM_DROP_RATE,
+  PLAYER_MAX_CANNON,
+  PLAYER_MAX_FIRE,
+  SPEED_BONUS_CAP,
+  SPEED_BONUS_PER_ITEM,
+} from '../../../shared/constants';
 import { ItemKind } from '../../../shared/types';
 import {
   CANDY_KEYFRAMES,
@@ -107,7 +114,7 @@ export function runGuide(): void {
 
   const tiles = [
     card(stage(cubeHtml('wall')), '巧克力牆（硬磚）', '打不破的牆，會擋住爆炸。'),
-    card(stage(cubeHtml('block')), '蛋糕磚（軟磚）', '可以炸開，30% 機率掉一個道具。'),
+    card(stage(cubeHtml('block')), '蛋糕磚（軟磚）', `可以炸開，${ITEM_DROP_RATE * 100}% 機率掉一個道具。`),
     card(stage(''), '地板', '可以自由走動的地方。'),
   ].join('');
 
@@ -118,9 +125,9 @@ export function runGuide(): void {
   ].join('');
 
   const items = [
-    card(stage(itemHtml(ItemKind.FIRE)), '鮮奶油（火力）', '爆炸範圍 +1（上限 7）。'),
-    card(stage(itemHtml(ItemKind.CANNON)), '雞蛋（炸彈數）', '可同時多放一顆蛋糕（上限 6）。'),
-    card(stage(itemHtml(ItemKind.SPEED)), '翅膀（速度）', '移動更快，每顆 +0.4（上限 +2.0）。'),
+    card(stage(itemHtml(ItemKind.FIRE)), '鮮奶油（火力）', `爆炸範圍 +1（上限 ${PLAYER_MAX_FIRE}）。`),
+    card(stage(itemHtml(ItemKind.CANNON)), '雞蛋（炸彈數）', `可同時多放一顆蛋糕（上限 ${PLAYER_MAX_CANNON}）。`),
+    card(stage(itemHtml(ItemKind.SPEED)), '翅膀（速度）', `移動更快，每顆 +${SPEED_BONUS_PER_ITEM.toFixed(1)}（上限 +${SPEED_BONUS_CAP.toFixed(1)}）。`),
   ].join('');
 
   const chars = [

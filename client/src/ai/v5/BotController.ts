@@ -578,13 +578,19 @@ export class BotController {
 
   /**
    * Select the per-map profile. When an explicit override was supplied to the
-   * constructor it wins outright; otherwise dispatch on SimState.mapKind —
-   * classic vs pirate; any unknown value defaults to classic (a safe neutral).
+   * constructor it wins outright; otherwise dispatch on SimState.mapKind.
    * Pure / deterministic.
+   *
+   * ponytail: 'village' deliberately reuses the CLASSIC tuning — it's the live
+   * champion for village (mapChampions.ts) but has no village-specific profile,
+   * and PUSH-brick (pushable-brick) modeling is a known DEFERRED gap (bots don't
+   * push yet). Made explicit rather than hidden in the classic fallback; revisit
+   * once village is BT-benched / PUSH is modeled.
    */
   private profileFor(state: SimState): MapProfile {
     if (this.profileOverride !== null) return this.profileOverride;
-    return state.mapKind === 'pirate' ? PIRATE_PROFILE : CLASSIC_PROFILE;
+    if (state.mapKind === 'pirate') return PIRATE_PROFILE;
+    return CLASSIC_PROFILE; // 'classic' and 'village' (see note above)
   }
 
   /** Bot-private uniform float in [0, 1); threads the RNG state forward. */

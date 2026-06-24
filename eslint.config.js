@@ -10,6 +10,25 @@ const SIM_ISOLATION_MSG =
   'client/src/sim/** is pure deterministic logic: no Pixi, no render/, no net/.';
 const SIM_DETERMINISM_MSG =
   'Non-deterministic / floating-point intrinsic is banned in client/src/sim/** (use integer millitiles + the seeded PRNG).';
+const AI_DETERMINISM_MSG =
+  'Non-deterministic / floating-point intrinsic is banned in client/src/ai/** (bots are drop-in lockstep players; use integer math + the threaded bot RNG).';
+
+// The determinism intrinsic bans are shared by the sim and AI overrides. (The
+// AI tree legitimately imports sim types + shared code, so it does NOT get the
+// pixi/render/net isolation ban — only these.) Math.floor/min/max/round/imul
+// stay allowed: they are deterministic and not listed here.
+const determinismRules = (msg) => ({
+  'no-restricted-properties': [
+    'error',
+    { object: 'Date', property: 'now', message: msg },
+    { object: 'Math', property: 'random', message: msg },
+    { object: 'Math', property: 'sin', message: msg },
+    { object: 'Math', property: 'cos', message: msg },
+    { object: 'Math', property: 'sqrt', message: msg },
+    { object: 'performance', property: 'now', message: msg },
+  ],
+  'no-restricted-globals': ['error', { name: 'performance', message: msg }],
+});
 
 export default tseslint.config(
   {
@@ -39,19 +58,16 @@ export default tseslint.config(
           ],
         },
       ],
-      'no-restricted-properties': [
-        'error',
-        { object: 'Date', property: 'now', message: SIM_DETERMINISM_MSG },
-        { object: 'Math', property: 'random', message: SIM_DETERMINISM_MSG },
-        { object: 'Math', property: 'sin', message: SIM_DETERMINISM_MSG },
-        { object: 'Math', property: 'cos', message: SIM_DETERMINISM_MSG },
-        { object: 'Math', property: 'sqrt', message: SIM_DETERMINISM_MSG },
-        { object: 'performance', property: 'now', message: SIM_DETERMINISM_MSG },
-      ],
-      'no-restricted-globals': [
-        'error',
-        { name: 'performance', message: SIM_DETERMINISM_MSG },
-      ],
+      ...determinismRules(SIM_DETERMINISM_MSG),
+    },
+  },
+  {
+    // --- AI determinism guardrail (bots are drop-in lockstep players) ---
+    // ONLY the determinism intrinsic bans — NOT the sim's pixi/render/net
+    // isolation ban, because the AI legitimately imports sim types + shared code.
+    files: ['client/src/ai/**/*.ts'],
+    rules: {
+      ...determinismRules(AI_DETERMINISM_MSG),
     },
   },
 );

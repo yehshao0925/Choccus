@@ -1,8 +1,9 @@
 """Authoritative player ratings — OpenSkill (PlackettLuce) over SQLite.
 
 The relay is the only place that updates ratings: clients merely report the
-match winner (cross-checked by lockstep hash agreement), and this module
-recomputes μ/σ for every participant and persists them. Open-source and
+match winner (cross-checked by per-slot consensus in Room.apply_result — every
+connected human must agree before a result counts), and this module recomputes
+μ/σ for every participant and persists them. Open-source and
 patent-free (unlike TrueSkill), so it fits the clean-room rules.
 
 Bots get NO special treatment — they are stored under a stable synthetic id

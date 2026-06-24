@@ -61,8 +61,13 @@ class Room:
     seed: int | None = None
     #: Authoritative rating store (shared across rooms); None disables ratings.
     store: RatingStore | None = None
-    #: Guard so each match's result is applied to ratings at most once.
+    #: Guard so each match's result is applied to ratings at most once (also set
+    #: on a disputed result so a later honest re-report can't game it).
     _rated: bool = False
+    #: Per-match consensus tally: human slot -> its reported winner_team. Ratings
+    #: only apply once every currently-connected human slot has reported AND they
+    #: all agree (lockstep makes honest clients agree; a lone liar can't rate).
+    _results: dict[int, int | None] = field(default_factory=dict)
 
     # -- membership -----------------------------------------------------------
 
@@ -134,6 +139,7 @@ class Room:
             return
         self.phase = GamePhase.PLAYING
         self._rated = False
+        self._results = {}
         self.seed = secrets.randbits(32)
         # Participant slots = humans + bots (so the InputBroadcast array spans
         # them); bot slots are passed as `bots` so the coordinator never waits
@@ -148,16 +154,41 @@ class Room:
         for slot, player in self.players.items():
             player.send(match_start(self.seed, slot, config, MATCH_T0))
 
-    def apply_result(self, winner_team: int | None) -> bool:
-        """Fold a reported match outcome into ratings (once per match).
+    def apply_result(self, slot: int, winner_team: int | None) -> bool:
+        """Record one human slot's reported outcome; rate on full consensus.
 
         Net matches are FFA, so a player's team is their slot and `winner_team`
         is the winning slot (or None for a draw). Every occupied slot — humans
-        (by player_id) and bots (by synthetic id) — is a participant. Returns
-        True if ratings were updated (False = no store / already rated / not
-        playing). The first valid report wins; lockstep hash agreement is what
-        keeps a lone client from skewing the outcome."""
+        (by player_id) and bots (by synthetic id) — is a participant. Ratings
+        are applied ONCE, only after EVERY currently-connected human slot has
+        reported AND all reports agree on the same winner_team — the relay runs
+        no sim, so cross-client agreement (which lockstep already forces on
+        honest clients) is the only check that stops a lone liar from forging a
+        result. On disagreement the match is marked rated WITHOUT applying any
+        outcome, so a later honest re-report can't be gamed. Returns True iff
+        ratings were updated (False = no store / already rated / not playing /
+        still waiting on reports / disputed)."""
         if self.store is None or self._rated or self.phase != GamePhase.PLAYING:
+            return False
+        if slot not in self.players:
+            return False  # bots never report; unknown slots ignored
+        self._results[slot] = winner_team
+        connected_humans = {s for s, p in self.players.items() if p.connected}
+        # ponytail: if only ONE human is connected when results arrive (others
+        # disconnected), accept its single report — unverifiable without a
+        # server sim, but a lone survivor has nobody to collude against. Ceiling:
+        # a sole-survivor client can still self-declare; closing that needs a
+        # server-side sim, deliberately out of scope for a pure relay.
+        if not connected_humans <= self._results.keys():
+            return False  # still waiting on some connected human's report
+        reported = {self._results[s] for s in connected_humans}
+        if len(reported) > 1:
+            self._rated = True  # disputed: never rate, and lock out re-reports
+            print(
+                f"[choccus] room {self.room_id}: disputed MATCH_RESULT "
+                f"{sorted(self._results.items())} — not rating",
+                flush=True,
+            )
             return False
         participants = [
             {"player_id": p.player_id or f"anon:{self.room_id}:{slot}",

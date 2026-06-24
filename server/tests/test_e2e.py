@@ -11,6 +11,7 @@ from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
 
 from relay import protocol
+from relay.constants import MAX_NAME_LEN, MAX_ROOM_ID_LEN
 from relay.protocol import MsgType, decode
 from relay.relay_server import RelayServer
 
@@ -173,6 +174,20 @@ def test_rematch_ready_toggle_resets_room_and_restarts():
             await b.send(protocol.input_frame(2, dirs=8, actions=0))
             bc = await recv_until(a, MsgType.INPUT_BROADCAST)
             assert bc["t"] == 2
+
+    asyncio.run(with_server(body))
+
+
+def test_oversized_join_fields_are_truncated_not_crashing():
+    # Untrusted name/roomId are capped on ingest before broadcast/storage.
+    async def body(url: str):
+        async with connect(url) as a:
+            big_name = "N" * 200
+            big_room = "R" * 200
+            await a.send(protocol.join_room(big_room, big_name, "P" * 500))
+            state = await recv_until(a, MsgType.ROOM_STATE, timeout=0.5)
+            assert state["roomId"] == "R" * MAX_ROOM_ID_LEN
+            assert state["players"][0]["name"] == "N" * MAX_NAME_LEN
 
     asyncio.run(with_server(body))
 

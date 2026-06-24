@@ -95,16 +95,4 @@ export class NetDebugOverlay {
     }
     this.logEl.textContent = this.lines.join('\n');
   }
-
-  /** Manual-mode ready checkbox (autoready=1 skips this). */
-  addReadyToggle(onChange: (ready: boolean) => void): void {
-    const label = document.createElement('label');
-    label.style.cssText = 'display:block;margin-top:8px;cursor:pointer;';
-    const box = document.createElement('input');
-    box.type = 'checkbox';
-    box.addEventListener('change', () => onChange(box.checked));
-    label.appendChild(box);
-    label.appendChild(document.createTextNode(' ready'));
-    this.root.appendChild(label);
-  }
 }

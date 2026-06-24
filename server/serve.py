@@ -95,7 +95,9 @@ def _start_static_server(static_dir: Path, host: str, port: int) -> None:
 async def _run_relay(host: str, port: int) -> None:
     relay = RelayServer()
     loop_name = "uvloop" if uvloop is not None else "asyncio"
-    async with ws_serve(relay.handler, host, port):
+    # Relay frames are tiny (inputs/hashes + capped strings); 8 KiB is plenty
+    # and far below the 1 MiB default, shrinking the per-frame OOM surface.
+    async with ws_serve(relay.handler, host, port, max_size=8 * 1024):
         print(
             f"[choccus] relay server   → ws://{host}:{port}  ({loop_name})",
             flush=True,
