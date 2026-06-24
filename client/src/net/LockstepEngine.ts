@@ -138,12 +138,10 @@ export class LockstepEngine {
     this.sampleLocalInput = opts.sampleLocalInput;
     this.onTick = opts.onTick;
 
-    const wire = opts.start.config;
-    const feel: FeelParams = makeFeelParams({
-      moveSpeed: wire.moveSpeed,
-      cornerAssistTolerance: wire.cornerAssist,
-      inputBufferMs: wire.inputBufferMs,
-    });
+    // The wire config (shared/protocol.ts FeelParams) and the client config
+    // (config/FeelParams.ts) now share identical field names, so the MatchStart
+    // config feeds makeFeelParams directly — no hand-map to drift.
+    const feel: FeelParams = makeFeelParams(opts.start.config);
     // team = slot (teams omitted → default). Computed identically on every
     // client from the shared seed + roster width, so it never diverges. The
     // spawn-corner permutation is likewise derived purely from the shared seed,
@@ -196,13 +194,22 @@ export class LockstepEngine {
         this.pendingInputs.set(m.t, bySlot);
       }),
       this.client.on('hashMismatch', (m) => {
+        if (this.desynced) return; // fire recovery once
         this.desynced = true;
         this.lastMismatch = m;
         console.error(
           `[lockstep] DESYNC at tick ${m.t}: hashes=[${m.hashes
             .map((h) => `0x${(h >>> 0).toString(16).padStart(8, '0')}`)
-            .join(', ')}] — match frozen (resync is post-M5)`,
+            .join(', ')}] — returning to lobby (resync is post-M5)`,
         );
+        // ponytail: recovery ceiling = reload back to the lobby, NOT rollback /
+        // state-resync netcode. update() already early-returns forever once
+        // desynced (dead canvas); a hard reload to ?mode=net drops the player on
+        // a fresh lobby so they aren't stuck on a frozen match.
+        this.stop();
+        const u = new URL(window.location.href);
+        u.search = '?mode=net';
+        window.location.assign(u.toString());
       }),
       this.client.on('stallNotice', (m) => {
         this.lastStall = m;

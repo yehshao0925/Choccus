@@ -145,28 +145,6 @@ export class NetLobby {
     this.client.removeBot(slot);
   }
 
-  /** Resolves on the next MatchStart; rejects if the socket closes first. */
-  waitForMatchStart(): Promise<MatchStartMsg> {
-    return new Promise((resolve, reject) => {
-      const offs: Array<() => void> = [];
-      const cleanup = (): void => {
-        for (const off of offs) off();
-      };
-      offs.push(
-        this.client.on('matchStart', (msg) => {
-          cleanup();
-          resolve(msg);
-        }),
-        this.client.on('close', (ev) => {
-          cleanup();
-          reject(
-            new Error(`connection closed before MatchStart (code ${ev.code})`),
-          );
-        }),
-      );
-    });
-  }
-
   private setPhase(phase: NetLobbyPhase): void {
     if (this.phase === phase) return;
     this.phase = phase;
