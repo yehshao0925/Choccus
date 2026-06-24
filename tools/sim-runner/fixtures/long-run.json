@@ -78,13 +78,12 @@
     { "tick": 1497, "slot": 0, "dir": 2, "action": 0 },
     { "tick": 1518, "slot": 0, "dir": 0, "action": 1 },
     { "tick": 1519, "slot": 0, "dir": 1, "action": 0 },
-    { "tick": 1535, "slot": 0, "dir": 8, "action": 0 },
-    { "tick": 1546, "slot": 0, "dir": 0, "action": 0 },
+    { "tick": 1534, "slot": 0, "dir": 8, "action": 0 },
+    { "tick": 1547, "slot": 0, "dir": 0, "action": 0 },
     { "tick": 1557, "slot": 1, "dir": 4, "action": 0 },
     { "tick": 1577, "slot": 1, "dir": 8, "action": 0 },
     { "tick": 1601, "slot": 1, "dir": 0, "action": 1 },
-    { "tick": 1602, "slot": 1, "dir": 8, "action": 0 },
-    { "tick": 1621, "slot": 1, "dir": 2, "action": 0 },
+    { "tick": 1602, "slot": 1, "dir": 2, "action": 0 },
     { "tick": 1633, "slot": 1, "dir": 0, "action": 0 }
   ]
 }

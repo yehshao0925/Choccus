@@ -43,7 +43,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { MAPS, type Agent, type MapKind, makeAgent } from './bench-utils';
+import { MAPS, type Agent, type MapKind } from './bench-utils';
 import { type Game, runAllGames, scenarioSeed } from './matrix-runner';
 import { arg, duelCredit, idOf, parseChallenger } from './bt-common';
 

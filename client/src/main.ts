@@ -546,7 +546,7 @@ if (mode === 'spectate') {
 } else if (mode === 'solo') {
   void bootstrapSolo(params);
 } else if (mode === 'guide') {
-  runGuide(params);
+  runGuide();
 } else {
   // Default (and ?mode=net) → online lobby.
   void runNetMode(params);

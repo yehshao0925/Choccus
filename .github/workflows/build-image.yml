@@ -1,6 +1,10 @@
 name: build-image
 
+# Builds the Docker image and pushes it to ghcr. PRs push a `dev` + `sha-`
+# tagged test image you can spin a server from; main additionally moves the
+# `latest` tag. The merge gate (lint + tests) lives in test.yml.
 on:
+  pull_request:
   push:
     branches: [main]
 
@@ -9,30 +13,7 @@ permissions:
   packages: write
 
 jobs:
-  test-js:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run test:ci
-
-  test-py:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install -r server/requirements.txt
-      - run: python -m pytest server/tests -q
-
   build:
-    needs: [test-js, test-py]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,12 +24,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # `latest` only on main; PRs move `dev` and always get an immutable sha
+      # tag. Fork PRs get a read-only token and would fail to push, but this
+      # repo only builds its own branches.
       - id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=dev,enable=${{ github.event_name == 'pull_request' }}
             type=sha
 
       - uses: docker/build-push-action@v6

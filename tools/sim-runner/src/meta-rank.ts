@@ -41,7 +41,7 @@ import {
   agentIds,
   toTally,
 } from './bt-history';
-import { eloFromBeta, fitBradleyTerry, predictedWinProb } from './bradley-terry';
+import { fitBradleyTerry, predictedWinProb } from './bradley-terry';
 import { V3_NOISE, V3_POOL, arg, loadHistory } from './bt-common';
 
 /** A complete pairwise win-probability matrix plus which cells were imputed. */
@@ -90,7 +90,7 @@ function reportMap(
     return;
   }
 
-  const { m, imputed, beta } = buildWinMatrix(history, ids);
+  const { m, imputed } = buildWinMatrix(history, ids);
 
   // --- BT (anchored to v3 pool mean = 1500), for the side-by-side column. ----
   const anchorIndices = ids
@@ -276,7 +276,7 @@ function nashAverage(m: number[][]): { nash: number[]; rating: number[] } {
   // Hedge self-play. Fixed small step; average the iterate (standard for the
   // last-iterate-cycles issue in zero-sum). 50k iters is ample for ≤10 agents.
   const eta = 0.05;
-  let w = new Array<number>(n).fill(1);
+  const w = new Array<number>(n).fill(1);
   const avg = new Array<number>(n).fill(0);
   let p = normalise(w.slice());
   const ITERS = 50000;

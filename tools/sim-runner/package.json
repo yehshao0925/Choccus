@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "tsc --noEmit && vitest run",
-    "test:ci": "tsc --noEmit && vitest run --exclude '**/ai-live-selftrap.test.ts'",
+    "test:ci": "tsc --noEmit && vitest run --exclude '**/ai-selfkill.test.ts' --exclude '**/ai-chaosv.test.ts' --exclude '**/ai-live-selftrap.test.ts'",
     "replay": "tsx src/run-replay.ts",
     "tournament": "tsx src/tournament.ts",
     "gen-fixtures": "tsx src/gen-fixtures.ts",

@@ -35,8 +35,6 @@ import { arg, parseChallenger } from './bt-common';
 const STEP_DANGER_HORIZON = SPARK_TICKS + 4;
 const SURV_SAFE_HORIZON = FUSE_TICKS;
 const WINDOW = 600; // 10 s @ 60 Hz — the "signs ten seconds earlier" window.
-const SAMPLE_EVERY = 4; // compute the heavy danger features every N ticks (perf).
-const RING_MAX = Math.ceil(WINDOW / SAMPLE_EVERY) + 2;
 const FLOOD_CAP = 12;
 const FREE_CAP = 24;
 

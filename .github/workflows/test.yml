@@ -1,0 +1,32 @@
+name: test
+
+# The merge gate: lint + sim/AI correctness tests (JS) and the Python relay
+# tests. PR-only — branch protection requires PRs to be up to date before
+# merge, so the merged code == the tested PR code and re-running on main would
+# be pure redundancy. (Slow statistical AI self-trap sweeps are excluded from
+# test:ci and run locally before shipping.)
+on:
+  pull_request:
+
+jobs:
+  test-js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:ci
+
+  test-py:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r server/requirements.txt
+      - run: python -m pytest server/tests -q
