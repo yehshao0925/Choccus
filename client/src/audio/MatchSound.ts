@@ -18,8 +18,17 @@
  * the tick counter going backwards or to 0).
  */
 import { GamePhase } from '../../../shared/types';
+import {
+  SUDDEN_DEATH_START_TICK,
+  SUDDEN_DEATH_TILE_INTERVAL,
+} from '../../../shared/constants';
 import type { SimState } from '../sim/Sim';
 import { sfx } from './Sfx';
+
+/** Ticks-before-blow at which a bomb fires its single anticipatory fuse tick. */
+const FUSE_TICK_AT = 30; // ~0.5 s
+/** Crystallise tings are throttled to one per this many hardened tiles. */
+const CRYSTAL_EVERY = 2; // ponytail: avoids a 2.4 Hz ding train; tune if too sparse/busy
 
 export class MatchSound {
   private firedOnce = new Set<string>();
@@ -37,9 +46,11 @@ export class MatchSound {
     if (prev.tick === next.tick) return;
 
     this.checkBombs(prev, next);
+    this.checkFuse(prev, next);
     this.checkExplosions(prev, next);
     this.checkPlayers(prev, next);
     this.checkItems(prev, next);
+    this.checkSuddenDeath(prev, next);
     this.checkPhase(prev, next);
   }
 
@@ -56,6 +67,22 @@ export class MatchSound {
       if (!prevKeys.has(`${b.tileX},${b.tileY}`)) {
         sfx.place();
         break; // one sound per tick even if multiple bombs were placed
+      }
+    }
+  }
+
+  private checkFuse(prev: SimState, next: SimState): void {
+    // One soft tick per bomb as it crosses FUSE_TICK_AT ticks before blow.
+    // Break after the first crossing this frame so simultaneous bombs don't
+    // clatter (staggered fuses still each tick on their own frame).
+    for (const nb of next.bombs) {
+      const pb = prev.bombs.find(
+        (b) => b.tileX === nb.tileX && b.tileY === nb.tileY,
+      );
+      if (pb === undefined) continue; // brand new bomb → place() owns it
+      if (pb.fuseTicks > FUSE_TICK_AT && nb.fuseTicks <= FUSE_TICK_AT) {
+        sfx.fuse();
+        break;
       }
     }
   }
@@ -111,6 +138,24 @@ export class MatchSound {
     if (next.items.length < prev.items.length) {
       sfx.item();
     }
+  }
+
+  private checkSuddenDeath(prev: SimState, next: SimState): void {
+    // Onset: one dramatic warning the tick play crosses into sudden death.
+    if (prev.tick < SUDDEN_DEATH_START_TICK && next.tick >= SUDDEN_DEATH_START_TICK) {
+      sfx.shrinkWarn();
+      return;
+    }
+    if (next.tick < SUDDEN_DEATH_START_TICK) return;
+
+    // A tile crystallises every SUDDEN_DEATH_TILE_INTERVAL ticks; ting on each
+    // group of CRYSTAL_EVERY tiles so the ring's closing reads as creeping
+    // candy rather than a metronome. Derived from tick alone (deterministic),
+    // no grid diff needed.
+    const span = SUDDEN_DEATH_TILE_INTERVAL * CRYSTAL_EVERY;
+    const prevGroup = Math.floor((prev.tick - SUDDEN_DEATH_START_TICK) / span);
+    const nextGroup = Math.floor((next.tick - SUDDEN_DEATH_START_TICK) / span);
+    if (nextGroup > prevGroup) sfx.crystal();
   }
 
   private checkPhase(prev: SimState, next: SimState): void {

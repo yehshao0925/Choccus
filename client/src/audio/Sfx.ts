@@ -5,6 +5,16 @@
  * AudioContext is created lazily on the first call to resumeContext() (called
  * on first user gesture) so browsers never block autoplay.
  *
+ * Sound design: "軟黏可愛" candy palette (chocolate / cream / cake theme).
+ * Triangle + sine dominant (rounded, music-box bells), noise kept soft & wet
+ * (piped cream, sugar crackle), gentle wobbles for charm — nothing buzzy or
+ * harsh. Melodic cues (rescue / item / win / lose) are music-box arpeggios.
+ *
+ * Roster (13 cues):
+ *   place · explode · trap · rescue · item · eliminate · win · lose   (match)
+ *   count · go                                                        (intro)
+ *   fuse · shrinkWarn · crystal                                       (tension)
+ *
  * Mute state is persisted in localStorage under the key "choccus_muted".
  * A master GainNode lets every sound honour the mute flag without per-sound
  * branching (gain is set to 0 when muted).
@@ -92,6 +102,23 @@ class SfxEngine {
   }
 
   /**
+   * Attach a sine LFO to an oscillator's frequency for a gentle wobble.
+   * Returns nothing — the LFO lives until `stop`.
+   */
+  private wobble(target: OscillatorNode, rateHz: number, depthHz: number, when: number, stop: number): void {
+    const ctx = this.ctx!;
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = rateHz;
+    const lg = ctx.createGain();
+    lg.gain.value = depthHz;
+    lfo.connect(lg);
+    lg.connect(target.frequency);
+    lfo.start(when);
+    lfo.stop(stop);
+  }
+
+  /**
    * Create a white-noise buffer source connected through a BiquadFilter to
    * master. Returns [src, filter, env].
    */
@@ -124,69 +151,70 @@ class SfxEngine {
   }
 
   // ---------------------------------------------------------------------------
-  // SFX methods
+  // Match SFX
   // ---------------------------------------------------------------------------
 
   /**
-   * place() — soft "plop".
-   * Quick low sine pitch-drop + tiny noise burst.
-   * 60 ms total.
+   * place() — soft gooey "po" as a chocolate is set down.
+   * Rounded sine drop + a tiny triangle bup + a faint wet touch. ~90 ms.
    */
   place(): void {
     const ctx = this.ensure();
     if (ctx === null) return;
     const t = ctx.currentTime;
 
-    // Sine blip: 220 Hz → 100 Hz over 50 ms.
-    const [osc, env] = this.osc('sine', 220, t);
-    osc.frequency.setTargetAtTime(100, t, 0.02);
-    env.gain.setValueAtTime(0.35, t);
-    env.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
-    osc.stop(t + 0.07);
+    const [osc, env] = this.osc('sine', 280, t);
+    osc.frequency.exponentialRampToValueAtTime(120, t + 0.07);
+    env.gain.setValueAtTime(0.32, t);
+    env.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    osc.stop(t + 0.1);
 
-    // Short noise tick.
-    const [, , nEnv] = this.noise('bandpass', 800, t, 0.04);
-    nEnv.gain.setValueAtTime(0.08, t);
-    nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+    // Soft low bup for body.
+    const [o2, e2] = this.osc('triangle', 180, t + 0.005);
+    e2.gain.setValueAtTime(0.12, t + 0.005);
+    e2.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    o2.stop(t + 0.09);
+
+    // Faint wet "set down" touch (rounded lowpass, not a sharp tick).
+    const [, , nEnv] = this.noise('lowpass', 600, t, 0.03);
+    nEnv.gain.setValueAtTime(0.05, t);
+    nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
   }
 
   /**
-   * explode() — long wet cream squeeze "噗嘰~~~".
-   * Deliberately noise-dominated (wet/airy, barely tonal) so it reads as piped
-   * cream, not electronics: a soft low "噗" body + a gentle TRIANGLE squeak that
-   * bends up then eases down (the "嘰~", NO buzzy flutter LFO) + a lowpass-noise
-   * "ffff" spray sweeping down. Softer + longer (~0.85 s) than the old sawtooth.
+   * explode() — bouncy wet cream squeeze "噗嘰~".
+   * Soft low "噗" body + a TRIANGLE squeak that bends up then eases down with a
+   * gentle cute wobble + a lowpass-noise "ffff" spray sweeping down. ~0.7 s,
+   * noise-dominated so it reads as piped cream, not electronics.
    */
   explode(): void {
     const ctx = this.ensure();
     if (ctx === null) return;
     const t = ctx.currentTime;
-    const dur = 0.85; // drawn-out 噗嘰~~~
+    const dur = 0.7;
 
-    // Soft squish body "噗": low sine plop leads the squeeze, gives it weight.
-    const [sub, sEnv] = this.osc('sine', 95, t);
-    sub.frequency.exponentialRampToValueAtTime(42, t + 0.35);
+    // Soft squish body "噗".
+    const [sub, sEnv] = this.osc('sine', 100, t);
+    sub.frequency.exponentialRampToValueAtTime(45, t + 0.3);
     sEnv.gain.setValueAtTime(0.3, t);
-    sEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-    sub.stop(t + 0.42);
+    sEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.34);
+    sub.stop(t + 0.36);
 
-    // Squeeze squeak "嘰~": a SOFT triangle (not buzzy sawtooth, no flutter LFO).
-    // Bends up as cream is forced out, then eases down. Kept quiet so the wet
-    // noise dominates → squelchy and organic, not tonal/electronic.
-    const [osc, oEnv] = this.osc('triangle', 130, t);
-    osc.frequency.setValueAtTime(130, t);
-    osc.frequency.linearRampToValueAtTime(240, t + 0.12);
-    osc.frequency.exponentialRampToValueAtTime(85, t + dur);
+    // Bouncy cream squeak "嘰~" with a gentle cute wobble.
+    const [osc, oEnv] = this.osc('triangle', 150, t);
+    osc.frequency.setValueAtTime(150, t);
+    osc.frequency.linearRampToValueAtTime(300, t + 0.1);
+    osc.frequency.exponentialRampToValueAtTime(110, t + dur);
+    this.wobble(osc, 14, 18, t, t + dur);
     oEnv.gain.setValueAtTime(0.0, t);
-    oEnv.gain.linearRampToValueAtTime(0.18, t + 0.05);
+    oEnv.gain.linearRampToValueAtTime(0.2, t + 0.04);
     oEnv.gain.exponentialRampToValueAtTime(0.001, t + dur);
     osc.stop(t + dur + 0.02);
 
-    // Wet airy "ffff" spray: LOWPASS noise (rounder/wetter than bandpass), centre
-    // sweeping down as the cream eases out — this is the bulk of the sound.
-    const [, nFilt, nEnv] = this.noise('lowpass', 1500, t, dur);
-    nFilt.frequency.setValueAtTime(1500, t);
-    nFilt.frequency.exponentialRampToValueAtTime(240, t + dur);
+    // Wet airy "ffff" spray — bulk of the sound.
+    const [, nFilt, nEnv] = this.noise('lowpass', 1600, t, dur);
+    nFilt.frequency.setValueAtTime(1600, t);
+    nFilt.frequency.exponentialRampToValueAtTime(260, t + dur);
     nFilt.Q.value = 0.7;
     nEnv.gain.setValueAtTime(0.0, t);
     nEnv.gain.linearRampToValueAtTime(0.22, t + 0.04);
@@ -194,43 +222,36 @@ class SfxEngine {
   }
 
   /**
-   * trap() — glassy/icy chime for shell crystallise.
-   * High triangle wave + ring modulation (carrier × AM oscillator).
-   * 400 ms total.
+   * trap() — sweet glassy "✨ting" as the sugar shell crystallises.
+   * Stacked triangle bells + a quick upward sparkle glissando. ~0.4 s.
    */
   trap(): void {
     const ctx = this.ensure();
     if (ctx === null) return;
     const t = ctx.currentTime;
 
-    // Carrier: triangle at 1200 Hz.
-    const [carrier, cEnv] = this.osc('triangle', 1200, t);
-    cEnv.gain.setValueAtTime(0.4, t);
-    cEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-    carrier.stop(t + 0.36);
+    const bells: [number, number][] = [
+      [1568, 0.32], // G6
+      [2349, 0.16], // D7
+    ];
+    for (const [f, g] of bells) {
+      const [o, e] = this.osc('triangle', f, t);
+      e.gain.setValueAtTime(g, t);
+      e.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+      o.stop(t + 0.42);
+    }
 
-    // Ring-mod AM at 440 Hz multiplied against carrier via a gain node.
-    const amOsc = ctx.createOscillator();
-    amOsc.type = 'sine';
-    amOsc.frequency.value = 440;
-    const amGain = ctx.createGain();
-    amGain.gain.value = 0; // starts silent — AM modulates
-    amOsc.connect(amGain.gain);
-    carrier.connect(amGain);
-    amGain.connect(this.master!);
-    amOsc.start(t);
-    amOsc.stop(t + 0.36);
-
-    // High sparkle overlay: 2400 Hz triangle.
-    const [osc2, env2] = this.osc('triangle', 2400, t);
-    env2.gain.setValueAtTime(0.15, t);
-    env2.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
-    osc2.stop(t + 0.21);
+    // Upward sparkle glissando.
+    const [s, sE] = this.osc('sine', 1046, t);
+    s.frequency.exponentialRampToValueAtTime(3136, t + 0.18);
+    sE.gain.setValueAtTime(0.0, t);
+    sE.gain.linearRampToValueAtTime(0.12, t + 0.02);
+    sE.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    s.stop(t + 0.22);
   }
 
   /**
-   * rescue() — bright rising arpeggio (4 notes).
-   * C5→E5→G5→C6, each 80 ms.
+   * rescue() — bright music-box rising arpeggio C5→E5→G5→C6 with octave shimmer.
    */
   rescue(): void {
     const ctx = this.ensure();
@@ -241,57 +262,68 @@ class SfxEngine {
       const start = t + i * 0.07;
       const [osc, env] = this.osc('triangle', freq, start);
       env.gain.setValueAtTime(0.28, start);
-      env.gain.exponentialRampToValueAtTime(0.001, start + 0.1);
-      osc.stop(start + 0.11);
+      env.gain.exponentialRampToValueAtTime(0.001, start + 0.16);
+      osc.stop(start + 0.18);
+      // Soft octave shimmer.
+      const [o2, e2] = this.osc('sine', freq * 2, start);
+      e2.gain.setValueAtTime(0.06, start);
+      e2.gain.exponentialRampToValueAtTime(0.001, start + 0.1);
+      o2.stop(start + 0.12);
     });
   }
 
   /**
-   * item() — short pleasant two-note ding.
-   * E5 → A5, each ~100 ms.
+   * item() — cute "pi-rin" pickup ding G5 → D6 with a sparkle tail.
    */
   item(): void {
     const ctx = this.ensure();
     if (ctx === null) return;
     const t = ctx.currentTime;
     const pairs: [number, number][] = [
-      [659.25, t],
-      [880.0, t + 0.08],
+      [783.99, t],         // G5
+      [1174.66, t + 0.07], // D6
     ];
     for (const [freq, start] of pairs) {
       const [osc, env] = this.osc('triangle', freq, start);
-      env.gain.setValueAtTime(0.25, start);
-      env.gain.exponentialRampToValueAtTime(0.001, start + 0.12);
-      osc.stop(start + 0.13);
+      env.gain.setValueAtTime(0.26, start);
+      env.gain.exponentialRampToValueAtTime(0.001, start + 0.14);
+      osc.stop(start + 0.16);
     }
+    // Tiny sparkle tail.
+    const [o3, e3] = this.osc('sine', 2349, t + 0.07);
+    e3.gain.setValueAtTime(0.08, t + 0.07);
+    e3.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    o3.stop(t + 0.22);
   }
 
   /**
-   * eliminate() — dull crack for shell-break / elimination.
-   * Mid-frequency bandpass noise burst with a low thud.
-   * 200 ms total.
+   * eliminate() — cartoon sugar-shell crack + a comedic "bo-wop" droop.
+   * Soft crackle (not a harsh thud) so KO reads as candy shattering. ~0.3 s.
    */
   eliminate(): void {
     const ctx = this.ensure();
     if (ctx === null) return;
     const t = ctx.currentTime;
 
-    // Crack noise.
-    const [, , nEnv] = this.noise('bandpass', 1200, t, 0.2);
-    nEnv.gain.setValueAtTime(0.45, t);
-    nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    // Crisp sugar-shell crackle sweeping down.
+    const [, nFilt, nEnv] = this.noise('bandpass', 2000, t, 0.12);
+    nFilt.frequency.setValueAtTime(2400, t);
+    nFilt.frequency.exponentialRampToValueAtTime(700, t + 0.12);
+    nFilt.Q.value = 1.2;
+    nEnv.gain.setValueAtTime(0.3, t);
+    nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
 
-    // Dull thud.
-    const [osc, oEnv] = this.osc('sine', 120, t);
-    osc.frequency.setTargetAtTime(50, t, 0.04);
-    oEnv.gain.setValueAtTime(0.35, t);
-    oEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-    osc.stop(t + 0.16);
+    // Comedic "bo-wop" droop.
+    const [osc, oEnv] = this.osc('triangle', 440, t + 0.04);
+    osc.frequency.setValueAtTime(440, t + 0.04);
+    osc.frequency.exponentialRampToValueAtTime(130, t + 0.3);
+    oEnv.gain.setValueAtTime(0.3, t + 0.04);
+    oEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+    osc.stop(t + 0.34);
   }
 
   /**
-   * win() — short major-key jingle (5 notes ascending).
-   * C5→E5→G5→C6→E6, each 120 ms.
+   * win() — happy music-box fanfare C5→E5→G5→C6→E6 + a final sparkle shimmer.
    */
   win(): void {
     const ctx = this.ensure();
@@ -302,14 +334,22 @@ class SfxEngine {
       const start = t + i * 0.1;
       const [osc, env] = this.osc('triangle', freq, start);
       env.gain.setValueAtTime(0.3, start);
-      env.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
-      osc.stop(start + 0.19);
+      env.gain.exponentialRampToValueAtTime(0.001, start + 0.2);
+      osc.stop(start + 0.22);
+      const [o2, e2] = this.osc('sine', freq * 2, start);
+      e2.gain.setValueAtTime(0.07, start);
+      e2.gain.exponentialRampToValueAtTime(0.001, start + 0.14);
+      o2.stop(start + 0.16);
     });
+    // Final sparkle shimmer.
+    const [s, sE] = this.osc('triangle', 2637, t + 0.5); // E7
+    sE.gain.setValueAtTime(0.14, t + 0.5);
+    sE.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+    s.stop(t + 0.92);
   }
 
   /**
-   * lose() — short minor-key jingle (4 notes descending).
-   * A4→F4→D4→A3, each 140 ms.
+   * lose() — comedic-sad droopy descend A4→F4→D4→A3 + a final "bloop" slide.
    */
   lose(): void {
     const ctx = this.ensure();
@@ -317,12 +357,134 @@ class SfxEngine {
     const t = ctx.currentTime;
     const notes = [440.0, 349.23, 293.66, 220.0]; // A4 F4 D4 A3
     notes.forEach((freq, i) => {
-      const start = t + i * 0.12;
+      const start = t + i * 0.14;
       const [osc, env] = this.osc('triangle', freq, start);
       env.gain.setValueAtTime(0.3, start);
-      env.gain.exponentialRampToValueAtTime(0.001, start + 0.2);
-      osc.stop(start + 0.21);
+      env.gain.exponentialRampToValueAtTime(0.001, start + 0.24);
+      osc.stop(start + 0.26);
     });
+    // Final droopy "bloop" slide under the last note.
+    const last = t + 3 * 0.14;
+    const [osc, env] = this.osc('sine', 220, last);
+    osc.frequency.exponentialRampToValueAtTime(110, last + 0.4);
+    env.gain.setValueAtTime(0.28, last);
+    env.gain.exponentialRampToValueAtTime(0.001, last + 0.45);
+    osc.stop(last + 0.47);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Intro SFX
+  // ---------------------------------------------------------------------------
+
+  /**
+   * count(n) — soft music-box "ti" for each intro number (n = 3,2,1).
+   * Pitch rises 3→2→1 to build tension. Octave sparkle on top.
+   */
+  count(n: number): void {
+    const ctx = this.ensure();
+    if (ctx === null) return;
+    const t = ctx.currentTime;
+    const base = n >= 3 ? 392 : n === 2 ? 440 : 494; // G4 A4 B4
+
+    const [o, e] = this.osc('triangle', base, t);
+    e.gain.setValueAtTime(0.0, t);
+    e.gain.linearRampToValueAtTime(0.3, t + 0.01);
+    e.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    o.stop(t + 0.2);
+
+    const [o2, e2] = this.osc('triangle', base * 2, t);
+    e2.gain.setValueAtTime(0.0, t);
+    e2.gain.linearRampToValueAtTime(0.08, t + 0.01);
+    e2.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    o2.stop(t + 0.12);
+  }
+
+  /**
+   * go() — bright cheerful "pi-PON!" two-note leap E5→B5 + sparkle. Match start.
+   */
+  go(): void {
+    const ctx = this.ensure();
+    if (ctx === null) return;
+    const t = ctx.currentTime;
+    const notes: [number, number][] = [
+      [659.25, t],        // E5
+      [987.77, t + 0.08], // B5
+    ];
+    notes.forEach(([f, s], i) => {
+      const [o, e] = this.osc('triangle', f, s);
+      const peak = i === 1 ? 0.4 : 0.3;
+      e.gain.setValueAtTime(0, s);
+      e.gain.linearRampToValueAtTime(peak, s + 0.01);
+      e.gain.exponentialRampToValueAtTime(0.001, s + 0.22);
+      o.stop(s + 0.24);
+    });
+    // Sparkle tail.
+    const [o3, e3] = this.osc('triangle', 1975.5, t + 0.12); // B6
+    e3.gain.setValueAtTime(0, t + 0.12);
+    e3.gain.linearRampToValueAtTime(0.12, t + 0.13);
+    e3.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    o3.stop(t + 0.32);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tension SFX
+  // ---------------------------------------------------------------------------
+
+  /**
+   * fuse() — tiny soft "tik", a single anticipatory tick as a bomb nears its
+   * melt. Kept quiet so several near-blow bombs blend into tension, not clatter.
+   */
+  fuse(): void {
+    const ctx = this.ensure();
+    if (ctx === null) return;
+    const t = ctx.currentTime;
+    const [o, e] = this.osc('triangle', 1100, t);
+    e.gain.setValueAtTime(0.0, t);
+    e.gain.linearRampToValueAtTime(0.12, t + 0.005);
+    e.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    o.stop(t + 0.06);
+  }
+
+  /**
+   * shrinkWarn() — sudden-death onset alarm: an ominous-but-cute wavering tone
+   * that droops, over a low sub thump for weight. ~0.9 s, fires once per match.
+   */
+  shrinkWarn(): void {
+    const ctx = this.ensure();
+    if (ctx === null) return;
+    const t = ctx.currentTime;
+    const dur = 0.9;
+
+    const [o, e] = this.osc('triangle', 330, t);
+    o.frequency.setValueAtTime(330, t);
+    o.frequency.linearRampToValueAtTime(247, t + dur); // droop down
+    this.wobble(o, 7, 22, t, t + dur);
+    e.gain.setValueAtTime(0, t);
+    e.gain.linearRampToValueAtTime(0.3, t + 0.05);
+    e.gain.setValueAtTime(0.3, t + dur - 0.2);
+    e.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.stop(t + dur + 0.02);
+
+    // Low sub thump for weight.
+    const [sub, sE] = this.osc('sine', 110, t);
+    sub.frequency.exponentialRampToValueAtTime(70, t + 0.3);
+    sE.gain.setValueAtTime(0.3, t);
+    sE.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    sub.stop(t + 0.42);
+  }
+
+  /**
+   * crystal() — tiny sugar "ting" as a tile crystallises while the ring closes.
+   */
+  crystal(): void {
+    const ctx = this.ensure();
+    if (ctx === null) return;
+    const t = ctx.currentTime;
+    const [o, e] = this.osc('triangle', 2093, t); // C7
+    e.gain.setValueAtTime(0, t);
+    e.gain.linearRampToValueAtTime(0.1, t + 0.004);
+    e.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    o.stop(t + 0.14);
   }
 }
 
