@@ -13,7 +13,6 @@ Tick system order (do NOT reorder — determinism contract):
   9. win check → phase OVER
  10. tick + 1
 """
-import copy
 import numpy as np
 from rl.env.constants import (
     MILLITILE, FUSE_TICKS, SPARK_TICKS, MATCH_MAX_TICKS,
@@ -71,9 +70,36 @@ def _is_open(grid: np.ndarray, bombs: list[dict], x: int, y: int) -> bool:
     return bomb_at(bombs, x, y) is None
 
 
+def _copy_state(state: dict) -> dict:
+    """Shallow-copy state, manually copying each mutable field.
+
+    Avoids copy.deepcopy overhead (~3× faster) while staying correct:
+    - grid: numpy array — use ndarray.copy()
+    - players/bombs/explosions/items: list of flat dicts — copy each dict
+    - held_stack inside player: a list that is never mutated by the sim,
+      but copy it to avoid any shared-reference surprises
+    - prng / tick / phase / map_kind: scalars / str — no copy needed
+    """
+    s: dict = {
+        'tick': state['tick'],
+        'phase': state['phase'],
+        'prng': state['prng'],
+        'map_kind': state['map_kind'],
+        'grid': state['grid'].copy(),
+        'players': [
+            {**p, 'held_stack': list(p['held_stack'])}
+            for p in state['players']
+        ],
+        'bombs': [dict(b) for b in state['bombs']],
+        'explosions': [dict(e) for e in state['explosions']],
+        'items': [dict(i) for i in state['items']],
+    }
+    return s
+
+
 def tick(state: dict, inputs: list[InputFrame]) -> dict:
     """Advance state by one tick. Returns a NEW state (does not mutate input)."""
-    s = copy.deepcopy(state)
+    s = _copy_state(state)
     grid = s['grid']
     players = s['players']
     bombs = s['bombs']

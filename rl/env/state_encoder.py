@@ -70,16 +70,11 @@ def encode_state(state: dict, slot: int) -> tuple[np.ndarray, np.ndarray]:
 
     ch = np.zeros((MAP_ROWS, MAP_COLS, 12), dtype=np.float32)
 
-    # Ch 0-2: tile types
-    for y in range(MAP_ROWS):
-        for x in range(MAP_COLS):
-            kind = int(grid_raw[y * MAP_COLS + x])
-            if kind == TILE_HARD:
-                ch[y, x, 0] = 1.0
-            elif kind == TILE_SOFT:
-                ch[y, x, 1] = 1.0
-            elif kind == TILE_PUSH:
-                ch[y, x, 2] = 1.0
+    # Ch 0-2: tile types (vectorized — replaces nested Python loop)
+    grid_2d = grid_raw.reshape(MAP_ROWS, MAP_COLS)
+    ch[:, :, 0] = (grid_2d == TILE_HARD).astype(np.float32)
+    ch[:, :, 1] = (grid_2d == TILE_SOFT).astype(np.float32)
+    ch[:, :, 2] = (grid_2d == TILE_PUSH).astype(np.float32)
 
     # Ch 3: self position; Ch 4: enemy positions; Ch 10: trapped players
     self_player = None
