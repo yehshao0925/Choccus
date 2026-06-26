@@ -1,12 +1,9 @@
 # rl/tests/test_player.py
-import numpy as np
-import pytest
 from rl.env.player import (
     create_player, tile_of, player_speed_mt_per_tick, step_entity
 )
-from rl.env.map_gen import generate_map
 from rl.env.constants import MILLITILE, DEFAULT_MOVE_SPEED, DEFAULT_CORNER_ASSIST, TICK_HZ
-from rl.env.types import DIR_RIGHT, DIR_LEFT, DIR_UP, DIR_DOWN, TILE_HARD
+from rl.env.types import DIR_RIGHT, DIR_DOWN
 
 
 def _open_always(ax, bx):

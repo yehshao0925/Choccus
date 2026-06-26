@@ -9,7 +9,6 @@ from typing import Callable
 from rl.env.constants import (
     MILLITILE, TICK_HZ,
     PLAYER_START_FIRE, PLAYER_START_CANNON, PLAYER_START_SPEED_BONUS,
-    DEFAULT_MOVE_SPEED, DEFAULT_CORNER_ASSIST, DEFAULT_INPUT_BUFFER_MS,
 )
 from rl.env.types import DIR_NONE, DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT
 
