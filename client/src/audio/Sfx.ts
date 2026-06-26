@@ -150,74 +150,83 @@ class SfxEngine {
     return [src, filt, env];
   }
 
+  /**
+   * transient(when, gain, hp) — a ~12 ms highpassed noise click: the instant
+   * front edge that gives a hit its 打擊感. Layer it over a pitch-dropping sub
+   * for weight. Highpassed so it reads as a crisp snap, not a muddy thud.
+   */
+  private transient(when: number, gain: number, hp: number): void {
+    const [, , env] = this.noise('highpass', hp, when, 0.012);
+    env.gain.setValueAtTime(gain, when);
+    env.gain.exponentialRampToValueAtTime(0.001, when + 0.012);
+  }
+
   // ---------------------------------------------------------------------------
   // Match SFX
   // ---------------------------------------------------------------------------
 
   /**
-   * place() — soft gooey "po" as a chocolate is set down.
-   * Rounded sine drop + a tiny triangle bup + a faint wet touch. ~90 ms.
+   * place() — firm "thock" as a chocolate is set down with weight.
+   * A crisp contact tick + an instant-attack sine drop + a soft low bup. ~100 ms.
    */
   place(): void {
     const ctx = this.ensure();
     if (ctx === null) return;
     const t = ctx.currentTime;
 
-    const [osc, env] = this.osc('sine', 280, t);
-    osc.frequency.exponentialRampToValueAtTime(120, t + 0.07);
-    env.gain.setValueAtTime(0.32, t);
-    env.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
-    osc.stop(t + 0.1);
+    // Crisp tick of contact — the firm "set down" snap.
+    this.transient(t, 0.13, 2000);
 
-    // Soft low bup for body.
-    const [o2, e2] = this.osc('triangle', 180, t + 0.005);
-    e2.gain.setValueAtTime(0.12, t + 0.005);
+    // Weighty "thock" body: sine drop, instant attack (front-loaded = punch).
+    const [osc, env] = this.osc('sine', 300, t);
+    osc.frequency.exponentialRampToValueAtTime(110, t + 0.06);
+    env.gain.setValueAtTime(0.36, t);
+    env.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    osc.stop(t + 0.11);
+
+    // Soft low bup for rounded candy body.
+    const [o2, e2] = this.osc('triangle', 170, t + 0.004);
+    e2.gain.setValueAtTime(0.12, t + 0.004);
     e2.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
     o2.stop(t + 0.09);
-
-    // Faint wet "set down" touch (rounded lowpass, not a sharp tick).
-    const [, , nEnv] = this.noise('lowpass', 600, t, 0.03);
-    nEnv.gain.setValueAtTime(0.05, t);
-    nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
   }
 
   /**
-   * explode() — bouncy wet cream squeeze "噗嘰~".
-   * Soft low "噗" body + a TRIANGLE squeak that bends up then eases down with a
-   * gentle cute wobble + a lowpass-noise "ffff" spray sweeping down. ~0.7 s,
-   * noise-dominated so it reads as piped cream, not electronics.
+   * explode() — chocolate WHUMP with punch: a crack-front transient + a fast
+   * pitch-drop sub for body/weight, then the cream squish + wet "ffff" spray
+   * for candy identity. All layers instant-attack so the hit lands, not fades.
+   * ~0.5 s. The 打擊感 is the transient + sub, not distortion (stays on-theme).
    */
   explode(): void {
     const ctx = this.ensure();
     if (ctx === null) return;
     const t = ctx.currentTime;
-    const dur = 0.7;
+    const dur = 0.5;
 
-    // Soft squish body "噗".
-    const [sub, sEnv] = this.osc('sine', 100, t);
-    sub.frequency.exponentialRampToValueAtTime(45, t + 0.3);
-    sEnv.gain.setValueAtTime(0.3, t);
-    sEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.34);
-    sub.stop(t + 0.36);
+    // (1) Crack front — instant transient = the snap of the 打擊感.
+    this.transient(t, 0.22, 900);
 
-    // Bouncy cream squeak "嘰~" with a gentle cute wobble.
-    const [osc, oEnv] = this.osc('triangle', 150, t);
-    osc.frequency.setValueAtTime(150, t);
-    osc.frequency.linearRampToValueAtTime(300, t + 0.1);
+    // (2) Sub WHUMP — fast pitch drop, instant attack: the weight/body.
+    const [sub, sEnv] = this.osc('sine', 200, t);
+    sub.frequency.exponentialRampToValueAtTime(42, t + 0.09);
+    sEnv.gain.setValueAtTime(0.42, t);
+    sEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    sub.stop(t + 0.42);
+
+    // (3) Cream squish identity — kept, but instant attack so it punches.
+    const [osc, oEnv] = this.osc('triangle', 260, t);
     osc.frequency.exponentialRampToValueAtTime(110, t + dur);
-    this.wobble(osc, 14, 18, t, t + dur);
-    oEnv.gain.setValueAtTime(0.0, t);
-    oEnv.gain.linearRampToValueAtTime(0.2, t + 0.04);
+    this.wobble(osc, 14, 14, t, t + dur);
+    oEnv.gain.setValueAtTime(0.15, t);
     oEnv.gain.exponentialRampToValueAtTime(0.001, t + dur);
     osc.stop(t + dur + 0.02);
 
-    // Wet airy "ffff" spray — bulk of the sound.
-    const [, nFilt, nEnv] = this.noise('lowpass', 1600, t, dur);
-    nFilt.frequency.setValueAtTime(1600, t);
-    nFilt.frequency.exponentialRampToValueAtTime(260, t + dur);
+    // (4) Wet "ffff" debris spray, instant attack, sweeping down.
+    const [, nFilt, nEnv] = this.noise('lowpass', 2000, t, dur);
+    nFilt.frequency.setValueAtTime(2000, t);
+    nFilt.frequency.exponentialRampToValueAtTime(220, t + dur);
     nFilt.Q.value = 0.7;
-    nEnv.gain.setValueAtTime(0.0, t);
-    nEnv.gain.linearRampToValueAtTime(0.22, t + 0.04);
+    nEnv.gain.setValueAtTime(0.2, t);
     nEnv.gain.exponentialRampToValueAtTime(0.001, t + dur);
   }
 
@@ -297,27 +306,37 @@ class SfxEngine {
   }
 
   /**
-   * eliminate() — cartoon sugar-shell crack + a comedic "bo-wop" droop.
-   * Soft crackle (not a harsh thud) so KO reads as candy shattering. ~0.3 s.
+   * eliminate() — satisfying KO: a sharp shatter transient + a low body thump
+   * for weight, then the sugar-shell crackle and a comedic "bo-wop" droop tail.
+   * The impact lands first (打擊感), candy character follows. ~0.34 s.
    */
   eliminate(): void {
     const ctx = this.ensure();
     if (ctx === null) return;
     const t = ctx.currentTime;
 
-    // Crisp sugar-shell crackle sweeping down.
-    const [, nFilt, nEnv] = this.noise('bandpass', 2000, t, 0.12);
-    nFilt.frequency.setValueAtTime(2400, t);
-    nFilt.frequency.exponentialRampToValueAtTime(700, t + 0.12);
-    nFilt.Q.value = 1.2;
-    nEnv.gain.setValueAtTime(0.3, t);
-    nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    // Sharp shatter transient — the sugar shell cracking open.
+    this.transient(t, 0.3, 1600);
 
-    // Comedic "bo-wop" droop.
-    const [osc, oEnv] = this.osc('triangle', 440, t + 0.04);
-    osc.frequency.setValueAtTime(440, t + 0.04);
-    osc.frequency.exponentialRampToValueAtTime(130, t + 0.3);
-    oEnv.gain.setValueAtTime(0.3, t + 0.04);
+    // Low body thump under the crack for weight.
+    const [sub, subE] = this.osc('sine', 160, t);
+    sub.frequency.exponentialRampToValueAtTime(50, t + 0.1);
+    subE.gain.setValueAtTime(0.38, t);
+    subE.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    sub.stop(t + 0.24);
+
+    // Crisp sugar-shell crackle sweeping down (behind the impact front).
+    const [, nFilt, nEnv] = this.noise('bandpass', 2400, t, 0.14);
+    nFilt.frequency.setValueAtTime(2600, t);
+    nFilt.frequency.exponentialRampToValueAtTime(700, t + 0.14);
+    nFilt.Q.value = 1.4;
+    nEnv.gain.setValueAtTime(0.24, t);
+    nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+
+    // Comedic "bo-wop" droop tail (kept, quieter, after the hit).
+    const [osc, oEnv] = this.osc('triangle', 420, t + 0.05);
+    osc.frequency.exponentialRampToValueAtTime(120, t + 0.3);
+    oEnv.gain.setValueAtTime(0.22, t + 0.05);
     oEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
     osc.stop(t + 0.34);
   }
