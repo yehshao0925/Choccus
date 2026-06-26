@@ -20,3 +20,8 @@ CLAUDE.local.md
 .DS_Store
 tools/sim-runner/screen-baseline-*.json
 .idea/
+
+# RL training data and checkpoints (large generated files)
+rl/data/*.jsonl
+rl/data/*.npz
+rl/checkpoints/
