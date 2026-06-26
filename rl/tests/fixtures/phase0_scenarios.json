@@ -1,0 +1,37 @@
+[
+  {
+    "seed": 0,
+    "map_kind": "classic",
+    "num_players": 2,
+    "winner_slot": 1,
+    "duration_ticks": 7200
+  },
+  {
+    "seed": 1,
+    "map_kind": "classic",
+    "num_players": 2,
+    "winner_slot": 1,
+    "duration_ticks": 479
+  },
+  {
+    "seed": 2,
+    "map_kind": "pirate",
+    "num_players": 2,
+    "winner_slot": 1,
+    "duration_ticks": 7308
+  },
+  {
+    "seed": 3,
+    "map_kind": "classic",
+    "num_players": 4,
+    "winner_slot": null,
+    "duration_ticks": 484
+  },
+  {
+    "seed": 4,
+    "map_kind": "classic",
+    "num_players": 2,
+    "winner_slot": null,
+    "duration_ticks": 509
+  }
+]
