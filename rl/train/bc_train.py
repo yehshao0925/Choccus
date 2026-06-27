@@ -49,8 +49,9 @@ def train_bc(
     dataset = BCDataset(data_path)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
-    LOG_EVERY = 100  # print running stats every N batches
+    LOG_EVERY = 10  # print running stats every N batches
 
+    print(f"Device: {device}  |  batch={batch_size}  |  epochs={epochs}", flush=True)
     final_acc = 0.0
     for epoch in range(epochs):
         total_loss = 0.0

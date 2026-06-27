@@ -76,7 +76,7 @@ async function main() {
     stream.write(line + '\n');
 
     if ((g + 1) % 100 === 0) {
-      process.stderr.write(`\r${g + 1}/${numGames} games collected`);
+      process.stderr.write(`${g + 1}/${numGames} games collected\n`);
     }
   }
 
