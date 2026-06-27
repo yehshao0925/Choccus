@@ -94,9 +94,17 @@ def train_bc(
         print(f"[{now} +{elapsed:6.0f}s]  BC epoch {epoch + 1}/{epochs}: "
               f"loss={total_loss / max(total, 1):.4f}  acc={final_acc:.3f}")
 
+        # per-epoch checkpoint: bc_extractor_classic_ep1.pt, ep2.pt, ...
+        out = Path(output_path)
+        ckpt_path = out.with_stem(f"{out.stem}_ep{epoch + 1}")
+        ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(extractor.state_dict(), ckpt_path)
+        print(f"  → saved {ckpt_path}", flush=True)
+
+    # final checkpoint (no epoch suffix = best to load for PPO)
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     torch.save(extractor.state_dict(), output_path)
-    print(f"Saved extractor to {output_path}")
+    print(f"Saved final extractor to {output_path}")
     return final_acc
 
 
