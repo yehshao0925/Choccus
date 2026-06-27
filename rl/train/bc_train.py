@@ -9,6 +9,8 @@ Usage:
     --data rl/data/bc_classic.jsonl --epochs 10
 """
 import argparse
+import time
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -52,6 +54,7 @@ def train_bc(
     LOG_EVERY = 10  # print running stats every N batches
 
     print(f"Device: {device}  |  batch={batch_size}  |  epochs={epochs}", flush=True)
+    t_start = time.time()
     final_acc = 0.0
     for epoch in range(epochs):
         total_loss = 0.0
@@ -78,12 +81,17 @@ def train_bc(
             if batch_idx % LOG_EVERY == 0:
                 running_acc = correct / total
                 running_loss = total_loss / total
-                print(f"  epoch {epoch + 1}/{epochs}  batch {batch_idx}"
+                elapsed = time.time() - t_start
+                now = datetime.now().strftime('%H:%M:%S')
+                print(f"[{now} +{elapsed:6.0f}s]  epoch {epoch + 1}/{epochs}"
+                      f"  batch {batch_idx}"
                       f"  loss={running_loss:.4f}  acc={running_acc:.3f}",
                       flush=True)
 
         final_acc = correct / total if total > 0 else 0.0
-        print(f"BC epoch {epoch + 1}/{epochs}: "
+        elapsed = time.time() - t_start
+        now = datetime.now().strftime('%H:%M:%S')
+        print(f"[{now} +{elapsed:6.0f}s]  BC epoch {epoch + 1}/{epochs}: "
               f"loss={total_loss / max(total, 1):.4f}  acc={final_acc:.3f}")
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
