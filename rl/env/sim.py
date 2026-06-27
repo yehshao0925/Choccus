@@ -16,7 +16,7 @@ Tick system order (do NOT reorder — determinism contract):
 import numpy as np
 from rl.env.constants import (
     MILLITILE, FUSE_TICKS, SPARK_TICKS, MATCH_MAX_TICKS,
-    MAP_COLS, MAP_ROWS,
+    MAP_COLS, MAP_ROWS, PUSH_CHARGE_TICKS,
     DEFAULT_MOVE_SPEED, DEFAULT_CORNER_ASSIST, DEFAULT_INPUT_BUFFER_MS, TICK_HZ,
 )
 from rl.env.types import (
@@ -24,7 +24,7 @@ from rl.env.types import (
     DIR_NONE, DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT,
     ACTION_BOMB,
     InputFrame, NO_INPUT,
-    TILE_EMPTY, TILE_HARD,
+    TILE_EMPTY, TILE_HARD, TILE_PUSH,
 )
 from rl.env.map_gen import generate_map, map_spawns
 from rl.env.player import (
@@ -70,6 +70,50 @@ def _is_open(grid: np.ndarray, bombs: list[dict], x: int, y: int) -> bool:
     return bomb_at(bombs, x, y) is None
 
 
+def _dir_dx(d: int) -> int:
+    return -1 if d == DIR_LEFT else (1 if d == DIR_RIGHT else 0)
+
+
+def _dir_dy(d: int) -> int:
+    return -1 if d == DIR_UP else (1 if d == DIR_DOWN else 0)
+
+
+def can_push(
+    grid: np.ndarray, bombs: list[dict],
+    pos_x: int, pos_y: int, direction: int,
+) -> bool:
+    """True if a PUSH crate is directly ahead and can be shoved.
+    Requires player to be exactly tile-centred on both axes.
+    Mirrors canPush in client/src/sim/Player.ts."""
+    if pos_x % MILLITILE != 0 or pos_y % MILLITILE != 0:
+        return False
+    dx = _dir_dx(direction)
+    dy = _dir_dy(direction)
+    if dx == 0 and dy == 0:
+        return False
+    cx = tile_of(pos_x)
+    cy = tile_of(pos_y)
+    ax, ay = cx + dx, cy + dy   # tile directly ahead (the crate)
+    bx, by = ax + dx, ay + dy   # tile beyond (where crate slides to)
+    if not (0 <= ax < MAP_COLS and 0 <= ay < MAP_ROWS):
+        return False
+    if grid[ay * MAP_COLS + ax] != TILE_PUSH:
+        return False
+    return _is_open(grid, bombs, bx, by)
+
+
+def apply_push(grid: np.ndarray, pos_x: int, pos_y: int, direction: int) -> None:
+    """Slide the PUSH crate one tile ahead. MUTATES grid.
+    Caller must have verified can_push this tick.
+    Mirrors applyPush in client/src/sim/Player.ts."""
+    dx = _dir_dx(direction)
+    dy = _dir_dy(direction)
+    ax = tile_of(pos_x) + dx
+    ay = tile_of(pos_y) + dy
+    grid[ay * MAP_COLS + ax] = TILE_EMPTY
+    grid[(ay + dy) * MAP_COLS + (ax + dx)] = TILE_PUSH
+
+
 def _copy_state(state: dict) -> dict:
     """Shallow-copy state, manually copying each mutable field.
 
@@ -110,6 +154,8 @@ def tick(state: dict, inputs: list[InputFrame]) -> dict:
     # ── Step 1: resolve input & move ─────────────────────────────────────────
     for i, p in enumerate(players):
         if not p['alive'] or p['trapped']:
+            p['push_charge_dir'] = 0
+            p['push_charge_ticks'] = 0
             continue
         inp = inputs[i] if i < len(inputs) else NO_INPUT
         speed = player_speed_mt_per_tick(_MOVE_SPEED_MT, p['speed_bonus_tenths'])
@@ -118,12 +164,32 @@ def tick(state: dict, inputs: list[InputFrame]) -> dict:
             return _is_open(_g, _b, ax, bx)
 
         d = inp.dir
+        charging = False
         if d != DIR_NONE:
             nx, ny, moved = step_entity(open_fn, p['pos_x'], p['pos_y'], d, speed, _CORNER_ASSIST_MT)
             if moved:
                 p['pos_x'] = nx
                 p['pos_y'] = ny
                 p['facing'] = d
+            elif can_push(grid, bombs, p['pos_x'], p['pos_y'], d):
+                p['facing'] = d
+                charging = True
+                p['push_charge_ticks'] = (
+                    p['push_charge_ticks'] + 1 if p['push_charge_dir'] == d else 1
+                )
+                p['push_charge_dir'] = d
+                if p['push_charge_ticks'] >= PUSH_CHARGE_TICKS:
+                    apply_push(grid, p['pos_x'], p['pos_y'], d)
+                    p['push_charge_ticks'] = 0
+                    p['push_charge_dir'] = 0
+        if not charging:
+            p['push_charge_dir'] = 0
+            p['push_charge_ticks'] = 0
+
+    # Step 1½: a pushed crate may now sit on a floor item — remove that item.
+    # (grid was mutated above; item-tile==PUSH ⟺ a crate just slid onto it.)
+    if items:
+        items = [it for it in items if grid[it['tile_y'] * MAP_COLS + it['tile_x']] != TILE_PUSH]
 
     # ── Step 2: bomb placement ────────────────────────────────────────────────
     new_bombs = list(bombs)
