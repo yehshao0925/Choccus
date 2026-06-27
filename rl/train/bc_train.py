@@ -47,7 +47,7 @@ def train_bc(
     loss_fn = nn.CrossEntropyLoss()
 
     dataset = BCDataset(data_path)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
     final_acc = 0.0
     for epoch in range(epochs):
