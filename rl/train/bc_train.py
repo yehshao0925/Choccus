@@ -49,13 +49,15 @@ def train_bc(
     dataset = BCDataset(data_path)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
+    LOG_EVERY = 100  # print running stats every N batches
+
     final_acc = 0.0
     for epoch in range(epochs):
         total_loss = 0.0
         correct = 0
         total = 0
 
-        for grid, scalars, actions in loader:
+        for batch_idx, (grid, scalars, actions) in enumerate(loader, 1):
             grid    = grid.to(device)
             scalars = scalars.to(device)
             actions = actions.to(device)
@@ -71,6 +73,13 @@ def train_bc(
             total_loss += loss.item() * len(actions)
             correct    += (logits.argmax(1) == actions).sum().item()
             total      += len(actions)
+
+            if batch_idx % LOG_EVERY == 0:
+                running_acc = correct / total
+                running_loss = total_loss / total
+                print(f"  epoch {epoch + 1}/{epochs}  batch {batch_idx}"
+                      f"  loss={running_loss:.4f}  acc={running_acc:.3f}",
+                      flush=True)
 
         final_acc = correct / total if total > 0 else 0.0
         print(f"BC epoch {epoch + 1}/{epochs}: "
