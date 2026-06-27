@@ -98,12 +98,24 @@ def train_bc(
         out = Path(output_path)
         ckpt_path = out.with_stem(f"{out.stem}_ep{epoch + 1}")
         ckpt_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(extractor.state_dict(), ckpt_path)
+        torch.save({
+            'extractor': extractor.state_dict(),
+            'head':      head.state_dict(),
+            'epoch':     epoch + 1,
+            'acc':       final_acc,
+            'features_dim': features_dim,
+        }, ckpt_path)
         print(f"  → saved {ckpt_path}", flush=True)
 
     # final checkpoint (no epoch suffix = best to load for PPO)
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    torch.save(extractor.state_dict(), output_path)
+    torch.save({
+        'extractor': extractor.state_dict(),
+        'head':      head.state_dict(),
+        'epoch':     epochs,
+        'acc':       final_acc,
+        'features_dim': features_dim,
+    }, output_path)
     print(f"Saved final extractor to {output_path}")
     return final_acc
 
