@@ -1,13 +1,17 @@
 # rl/train/bc_dataset.py
 """
-BCDataset: replays v6:hunter trajectory JSONL using Python sim and
-encodes each tick as (grid, scalars, action) for BC supervised training.
+BCDataset: streaming IterableDataset that replays v6:hunter trajectory JSONL
+using Python sim and yields (grid, scalars, action) tuples for BC training.
+Memory footprint is O(shuffle_buffer) samples, not O(dataset size).
 """
 import json
-from pathlib import Path
+import random
+from collections.abc import Iterator
+
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch import Tensor
+from torch.utils.data import IterableDataset
 
 from rl.env.sim import create_initial_state, tick as sim_tick
 from rl.env.state_encoder import encode_state
@@ -44,29 +48,53 @@ def replay_trajectory(entry: dict) -> list[tuple[np.ndarray, np.ndarray, int]]:
     return samples
 
 
-class BCDataset(Dataset):
-    def __init__(self, jsonl_path: str):
-        self._grids:   list[np.ndarray] = []
-        self._scalars: list[np.ndarray] = []
-        self._actions: list[int] = []
+class BCDataset(IterableDataset):
+    """
+    Streaming BC dataset. Replays JSONL games one at a time and yields
+    (grid, scalars, action) tensors via an in-memory shuffle buffer.
 
-        with open(jsonl_path) as f:
+    Args:
+        jsonl_path: path to JSONL file (one game per line)
+        max_games: stop after this many games; None = all games
+        shuffle_buffer: samples held in memory before shuffling and yielding;
+                        0 = no shuffle (deterministic order, useful for tests)
+    """
+
+    def __init__(
+        self,
+        jsonl_path: str,
+        max_games: int | None = None,
+        shuffle_buffer: int = 5_000,
+    ):
+        self._path = jsonl_path
+        self._max_games = max_games
+        self._shuffle_buffer = shuffle_buffer
+
+    def __iter__(self) -> Iterator[tuple[Tensor, Tensor, Tensor]]:
+        buffer: list[tuple[Tensor, Tensor, Tensor]] = []
+        games_read = 0
+
+        with open(self._path) as f:
             for line in f:
+                if self._max_games is not None and games_read >= self._max_games:
+                    break
                 line = line.strip()
                 if not line:
                     continue
                 entry = json.loads(line)
                 for grid, scalars, action in replay_trajectory(entry):
-                    self._grids.append(grid)
-                    self._scalars.append(scalars)
-                    self._actions.append(action)
+                    buffer.append((
+                        torch.from_numpy(grid.copy()),
+                        torch.from_numpy(scalars.copy()),
+                        torch.tensor(action, dtype=torch.long),
+                    ))
+                    if self._shuffle_buffer > 0 and len(buffer) >= self._shuffle_buffer:
+                        random.shuffle(buffer)
+                        yield from buffer
+                        buffer = []
+                games_read += 1
 
-    def __len__(self) -> int:
-        return len(self._actions)
-
-    def __getitem__(self, idx: int):
-        return (
-            torch.from_numpy(self._grids[idx]),
-            torch.from_numpy(self._scalars[idx]),
-            torch.tensor(self._actions[idx], dtype=torch.long),
-        )
+        if buffer:
+            if self._shuffle_buffer > 0:
+                random.shuffle(buffer)
+            yield from buffer
